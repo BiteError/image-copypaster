@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image CopyPaster</title>
+    <style>
+        body { margin: 0; background: #1a1a1a; color: #ececec; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        #toolbar { padding: 10px; background: #2d2d2d; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #3d3d3d; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 10; }
+        #canvas-container { flex: 1; overflow: auto; position: relative; display: flex; align-items: center; justify-content: center; padding: 40px; background: #111; }
+        canvas { background: repeating-conic-gradient(#444 0% 25%, #555 0% 50%) 50% / 20px 20px; cursor: crosshair; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .hint { font-size: 11px; color: #888; margin-left: auto; display: flex; gap: 12px; }
+        button { padding: 6px 12px; cursor: pointer; background: #444; color: white; border: 1px solid #555; border-radius: 4px; font-size: 12px; }
+        button:hover { background: #555; }
+        button.primary { background: #2e7d32; border-color: #1b5e20; }
+        button.active { background: #007aff; border-color: #00c2ff; }
+        .color-preview { width: 20px; height: 20px; border: 1px solid #fff; border-radius: 3px; display: inline-block; vertical-align: middle; }
+        .toggle-group { display: flex; align-items: center; gap: 5px; font-size: 12px; border-left: 1px solid #444; padding-left: 10px; }
+        kbd { background: #555; padding: 2px 4px; border-radius: 3px; color: #fff; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+<div id="toolbar">
+    <button class="primary" onclick="createFromClipboard()">Create from Clipboard</button>
+    <button onclick="copySelection()">Copy Area</button>
+    <button onclick="zoomToFit()">Zoom to Fit</button>
+    <button onclick="flip('h')">Flip Horizontally</button>
+    <button onclick="flip('v')">Flip Vertically</button>
+    
+    <button id="picker-btn" onclick="togglePicker()">Pick Opacity Color</button>
+    <div class="color-preview" id="color-prev" style="background: transparent;"></div>
+    
+    <div class="toggle-group">
+        <input type="checkbox" id="transparency-toggle">
+        <label for="transparency-toggle">Enable Alpha Paste</label>
+    </div>
+
+    <div class="hint" id="hotkey-hint">
+        <span><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd>: Copy</span>
+        <span><kbd>⌘/Ctrl</kbd>+<kbd>V</kbd>: Paste</span>
+        <span><kbd>⌘/Ctrl</kbd>+<kbd>A</kbd>: All</span>
+        <span><kbd>H</kbd>/<kbd>V</kbd>: Flip</span>
+    </div>
+</div>
+
+<div id="canvas-container">
+    <canvas id="canvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    let img = null; 
+    let selection = { x: 0, y: 0, w: 0, h: 0, active: false };
+    let isDragging = false;
+    let isPickingColor = false;
+    let opacityColor = null;
+
+    async function createFromClipboard() {
+        try {
+            const clipboardItems = await navigator.clipboard.read();
+            for (const item of clipboardItems) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await item.getType(type);
+                        const bitmap = await createImageBitmap(blob);
+                        createNewMaster(bitmap);
+                        return;
+                    }
+                }
+            }
+            alert("No image found in clipboard!");
+        } catch (err) {
+            console.error(err);
+            alert("Clipboard access denied. Please allow permissions or use Ctrl+V.");
+        }
+    }
+
+    window.addEventListener('keydown', (e) => {
+        const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+        const key = e.key.toLowerCase();
+        
+        // Selection Hotkeys
+        if (isCmdOrCtrl && key === 'a') {
+            e.preventDefault();
+            if (!img) return;
+            selection = { x: 0, y: 0, w: img.width, h: img.height, active: true };
+            render();
+        }
+        if (isCmdOrCtrl && key === 'c') {
+            if (selection.active) { e.preventDefault(); copySelection(); }
+        }
+
+        // Flip Hotkeys
+        if (selection.active && !isCmdOrCtrl) {
+            if (key === 'h') flip('h');
+            if (key === 'v') flip('v');
+        }
+    });
+
+    window.addEventListener('paste', async (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const blob = item.getAsFile();
+                const bitmap = await createImageBitmap(blob);
+                if (selection.active) pasteIntoSelection(bitmap);
+                else createNewMaster(bitmap);
+                render();
+            }
+        }
+    });
+
+
+
+    function createNewMaster(bitmap) {
+        img = document.createElement('canvas');
+        img.width = bitmap.width;
+        img.height = bitmap.height;
+        img.getContext('2d').drawImage(bitmap, 0, 0);
+        canvas.width = img.width;
+        canvas.height = img.height;
+        selection.active = false;
+        render();
+        zoomToFit();
+    }
+
+    function pasteIntoSelection(bitmap) {
+        const sW = Math.abs(selection.w);
+        const sH = Math.abs(selection.h);
+        const sX = selection.w < 0 ? selection.x + selection.w : selection.x;
+        const sY = selection.h < 0 ? selection.y + selection.h : selection.y;
+
+        const temp = document.createElement('canvas');
+        temp.width = sW;
+        temp.height = sH;
+        const tCtx = temp.getContext('2d');
+        tCtx.drawImage(bitmap, 0, 0, sW, sH);
+
+        if (document.getElementById('transparency-toggle').checked && opacityColor) {
+            const imageData = tCtx.getImageData(0, 0, sW, sH);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const rMatch = Math.abs(data[i] - opacityColor.r) < 15;
+                const gMatch = Math.abs(data[i+1] - opacityColor.g) < 15;
+                const bMatch = Math.abs(data[i+2] - opacityColor.b) < 15;
+                if (rMatch && gMatch && bMatch) data[i + 3] = 0;
+            }
+            tCtx.putImageData(imageData, 0, 0);
+        }
+
+        img.getContext('2d').drawImage(temp, sX, sY);
+    }
+
+    function togglePicker() {
+        isPickingColor = !isPickingColor;
+        document.getElementById('picker-btn').classList.toggle('active', isPickingColor);
+        canvas.style.cursor = isPickingColor ? 'crosshair' : 'default';
+    }
+
+    canvas.addEventListener('mousedown', e => {
+        if (!img) return;
+        const rect = canvas.getBoundingClientRect();
+        const sx = canvas.width / rect.width;
+        const sy = canvas.height / rect.height;
+        const mouseX = (e.clientX - rect.left) * sx;
+        const mouseY = (e.clientY - rect.top) * sy;
+
+        if (isPickingColor) {
+            const pixel = img.getContext('2d').getImageData(mouseX, mouseY, 1, 1).data;
+            opacityColor = { r: pixel[0], g: pixel[1], b: pixel[2] };
+            document.getElementById('color-prev').style.background = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+            togglePicker();
+            return;
+        }
+
+        selection.x = mouseX; selection.y = mouseY;
+        selection.w = 0; selection.h = 0;
+        isDragging = true; selection.active = true;
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const sx = canvas.width / rect.width;
+        const sy = canvas.height / rect.height;
+        selection.w = ((e.clientX - rect.left) * sx) - selection.x;
+        selection.h = ((e.clientY - rect.top) * sy) - selection.y;
+        render();
+    });
+
+    window.addEventListener('mouseup', () => { 
+        isDragging = false; 
+        if(Math.abs(selection.w) < 2 && Math.abs(selection.h) < 2) selection.active = false;
+        render(); 
+    });
+
+    function zoomToFit() {
+        if (!img) return;
+        const container = document.getElementById('canvas-container');
+        const ratio = Math.min((container.clientWidth - 50) / img.width, (container.clientHeight - 50) / img.height, 1);
+        canvas.style.width = (img.width * ratio) + 'px';
+        canvas.style.height = (img.height * ratio) + 'px';
+        render();
+    }
+
+    async function copySelection() {
+        if (!selection.active || !img) return;
+        const sX = selection.w < 0 ? selection.x + selection.w : selection.x;
+        const sY = selection.h < 0 ? selection.y + selection.h : selection.y;
+        const sW = Math.abs(selection.w); const sH = Math.abs(selection.h);
+        const temp = document.createElement('canvas');
+        temp.width = sW; temp.height = sH;
+        temp.getContext('2d').drawImage(img, sX, sY, sW, sH, 0, 0, sW, sH);
+        temp.toBlob(async b => {
+            await navigator.clipboard.write([new ClipboardItem({ [b.type]: b })]);
+        });
+    }
+
+    function flip(axis) {
+        if (!img || !selection.active) return;
+        
+        // Normalize coordinates to handle "backward" dragging
+        const sW = Math.abs(selection.w); 
+        const sH = Math.abs(selection.h);
+        const sX = selection.w < 0 ? selection.x + selection.w : selection.x;
+        const sY = selection.h < 0 ? selection.y + selection.h : selection.y;
+
+        const temp = document.createElement('canvas');
+        temp.width = sW; 
+        temp.height = sH;
+        temp.getContext('2d').drawImage(img, sX, sY, sW, sH, 0, 0, sW, sH);
+        
+        const mainCtx = img.getContext('2d');
+        mainCtx.save();
+        // Move to the center of the selection area
+        mainCtx.translate(sX + sW/2, sY + sH/2);
+        mainCtx.scale(axis === 'h' ? -1 : 1, axis === 'v' ? -1 : 1);
+        // Draw the captured area back, centered
+        mainCtx.drawImage(temp, -sW/2, -sH/2, sW, sH);
+        mainCtx.restore();
+        render();
+    }
+
+    function render() {
+        if (!img) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        if (selection.active) {
+            const rect = canvas.getBoundingClientRect();
+            const scale = canvas.width / rect.width;
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2 * scale;
+            ctx.setLineDash([5 * scale, 5 * scale]);
+            ctx.strokeRect(selection.x, selection.y, selection.w, selection.h);
+            ctx.setLineDash([]);
+        }
+    }
+</script>
+</body>
+</html>
