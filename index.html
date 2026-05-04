@@ -22,7 +22,7 @@
 <body>
 
 <div id="toolbar">
-    <button class="primary" onclick="createFromClipboard()">Create from Clipboard</button>
+    <button class="primary" onclick="readFromClipboard(true)">Create from Clipboard</button>
     <button onclick="copySelection()">Copy Area</button>
     <button onclick="zoomToFit()">Zoom to Fit</button>
     <button onclick="flip('h')">Flip Horizontally</button>
@@ -54,31 +54,12 @@
     
     let img = null; 
     let selection = { x: 0, y: 0, w: 0, h: 0, active: false };
+    let selectedBlob = null;
     let isDragging = false;
     let isPickingColor = false;
     let opacityColor = null;
 
-    async function createFromClipboard() {
-        try {
-            const clipboardItems = await navigator.clipboard.read();
-            for (const item of clipboardItems) {
-                for (const type of item.types) {
-                    if (type.startsWith('image/')) {
-                        const blob = await item.getType(type);
-                        const bitmap = await createImageBitmap(blob);
-                        createNewMaster(bitmap);
-                        return;
-                    }
-                }
-            }
-            alert("No image found in clipboard!");
-        } catch (err) {
-            console.error(err);
-            alert("Clipboard access denied. Please allow permissions or use Ctrl+V.");
-        }
-    }
-
-    window.addEventListener('keydown', (e) => {
+    window.addEventListener('keydown', async (e) => {
         const isCmdOrCtrl = e.ctrlKey || e.metaKey;
         const key = e.key.toLowerCase();
         
@@ -88,9 +69,16 @@
             if (!img) return;
             selection = { x: 0, y: 0, w: img.width, h: img.height, active: true };
             render();
+
+            preSaveSelectionToBlob();
         }
         if (isCmdOrCtrl && key === 'c') {
-            if (selection.active) { e.preventDefault(); copySelection(); }
+            e.preventDefault(); 
+            await copySelection();
+        }
+        if (isCmdOrCtrl && key === 'v') {
+            e.preventDefault();
+            readFromClipboard();
         }
 
         // Flip Hotkeys
@@ -100,21 +88,6 @@
         }
     });
 
-    window.addEventListener('paste', async (e) => {
-        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-        for (let item of items) {
-            if (item.type.indexOf('image') !== -1) {
-                const blob = item.getAsFile();
-                const bitmap = await createImageBitmap(blob);
-                if (selection.active) pasteIntoSelection(bitmap);
-                else createNewMaster(bitmap);
-                render();
-            }
-        }
-    });
-
-
-
     function createNewMaster(bitmap) {
         img = document.createElement('canvas');
         img.width = bitmap.width;
@@ -123,8 +96,6 @@
         canvas.width = img.width;
         canvas.height = img.height;
         selection.active = false;
-        render();
-        zoomToFit();
     }
 
     function pasteIntoSelection(bitmap) {
@@ -195,6 +166,8 @@
         isDragging = false; 
         if(Math.abs(selection.w) < 2 && Math.abs(selection.h) < 2) selection.active = false;
         render(); 
+
+        preSaveSelectionToBlob();
     });
 
     function zoomToFit() {
@@ -206,17 +179,81 @@
         render();
     }
 
-    async function copySelection() {
-        if (!selection.active || !img) return;
+    async function preSaveSelectionToBlob() {
+        if (!selection.active || !img) return null;
         const sX = selection.w < 0 ? selection.x + selection.w : selection.x;
         const sY = selection.h < 0 ? selection.y + selection.h : selection.y;
         const sW = Math.abs(selection.w); const sH = Math.abs(selection.h);
         const temp = document.createElement('canvas');
         temp.width = sW; temp.height = sH;
         temp.getContext('2d').drawImage(img, sX, sY, sW, sH, 0, 0, sW, sH);
-        temp.toBlob(async b => {
-            await navigator.clipboard.write([new ClipboardItem({ [b.type]: b })]);
-        });
+        
+        const getBlob = (canvas) => new Promise(resolve => canvas.toBlob(resolve));
+
+        selectedBlob = await getBlob(temp);
+
+    }
+
+    async function copySelection() {
+        if (selection.active) {      
+            if (!selection.active || !img) return;
+            
+            const blob = selectedBlob;
+
+            if (!blob) {
+                alert('Unable to create clipboard image.');
+                return;
+            }
+
+            try {
+                const mime = blob.type || 'image/png';
+                const data = [new ClipboardItem({ [blob.type]: blob })];
+
+                if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+                    try {
+                        await navigator.clipboard.write(data);
+                        return;
+                    } catch (err) {
+                        console.warn('navigator.clipboard.write failed', err);
+                    }
+                }
+
+                throw new Error('Clipboard image copy is not supported in this browser.');
+            } catch (err) {
+                console.error(err);
+                alert('Copy failed: ' + (err && err.message ? err.message : 'unknown error'));
+            }
+        }
+    }
+
+    async function readFromClipboard(ignoreSelection = false) {
+        try {
+            const clipboardItems = await navigator.clipboard.read();
+            for (const item of clipboardItems) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await item.getType(type);
+                        const bitmap = await createImageBitmap(blob);
+                        
+                        if (!ignoreSelection && selection.active) {
+                            pasteIntoSelection(bitmap);
+                            render();
+                        }
+                        else {
+                            createNewMaster(bitmap);
+                            render();
+                            zoomToFit();
+                        }
+
+                        return;
+                    }
+                }
+            }
+            alert("No image found in clipboard!");
+        } catch (err) {
+            console.error(err);
+            alert("Clipboard access denied. Please allow permissions or use Ctrl+V.");
+        }
     }
 
     function flip(axis) {

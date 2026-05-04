@@ -1,4 +1,4 @@
-# Image Manipulator Ultra
+# Image CopyPaster
 
 A lightweight, browser-based image editor. It makes image handling as easy as text. If you find yourself constantly taking screenshots just to flip them or move them into a specific area, this is for you. Select your target, paste your image, and use basic tools to get the look right. No bloated menus—just the tools you need to get the job done.
 
