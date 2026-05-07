@@ -22,7 +22,11 @@ The application supports both **macOS (⌘)** and **Windows/Linux (Ctrl)** short
 | **Cmd/Ctrl + A** | Select the entire image area. |
 | **V** | Flip vertically selected area. |
 | **H** | Flip horizontally selected area. |
+| **R** | Rotate right selected area. |
+| **Shift + R** | Rotate left selected area. |
 | **Drag Mouse** | Create a custom rectangular selection. |
+| **Opt/Alt + Click** | Select the alpha color. |
+| **Shift + Opt/Alt + Click** | Disable the alpha color. |
 
 ## 🛠 How to Use
 
@@ -31,22 +35,20 @@ press the "Paste" shortcut. The browser will request clipboard permission if nec
 
 ### 2. Manipulating Areas
 Use your mouse to drag a box over an area or select with **Cmd/Ctrl + A** the whole area. You can now:
-*   Click **Flip H** or **Flip V** to mirror that specific section.
 *   Press **Cmd/Ctrl + C** to copy selected area into your clipboard.
 *   Press **Cmd/Ctrl + V** to replace that section with a new image from your clipboard.
+*   Press **H / V / R** to transform selected area.
 
-### 3. Using Transparency
-1.  Click **Pick Opacity Color**.
-2.  Click a pixel on your image that represents the color you want to make transparent (e.g., a green screen background).
-3.  Check the **Enable Alpha Paste** box.
-4.  Paste a new image. The sampled color will be filtered out, allowing the background to show through.
+### 3. Using Alpha Paste
+1.  While holding **Opt/ALt** click a pixel on your image that represents the color you want to make transparent (e.g., a green screen background).
+2.  Check the **Enable Alpha Paste** box.
+3.  Paste a new image. The sampled color will be filtered out, allowing the background to show through.
+4.  Disable Alpha Paste clicking on checkbox or clicking on image holding the **Shift+Opt/ALt**.
 
 ## 🔧 Technical Details
 
-*   **Pure JavaScript**: Built using the HTML5 Canvas API and the modern `navigator.clipboard` API.
+*   **Pure JavaScript**: Built using the HTML5 Canvas API and [Jimp](https://github.com/jimp-dev/jimp).
 *   **Secure Context**: This application requires a secure context (HTTPS or Localhost) to access clipboard functions.
-*   **Performance**: Uses `createImageBitmap` for high-performance image decoding and `willReadFrequently` optimization for pixel manipulation.
 
 ## ⚠️ Requirements
 *   A modern web browser (Chrome, Edge, Safari, or Firefox).
-*   For clipboard features to work, the app must be served via `http://localhost` or `https://`. Opening the file directly via `file://` may restrict clipboard/directory access in some browsers.

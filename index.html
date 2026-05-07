@@ -4,17 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image CopyPaster</title>
+    <script src="https://cdn.jsdelivr.net/npm/jimp/browser/lib/jimp.min.js"></script>
     <style>
         body { margin: 0; background: #1a1a1a; color: #ececec; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
         #toolbar { padding: 10px; background: #2d2d2d; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #3d3d3d; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 10; }
-        #canvas-container { flex: 1; overflow: auto; position: relative; display: flex; align-items: center; justify-content: center; padding: 40px; background: #111; }
-        canvas { background: repeating-conic-gradient(#444 0% 25%, #555 0% 50%) 50% / 20px 20px; cursor: crosshair; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        #container { flex: 1; overflow: auto; position: relative; display: flex; align-items: center; justify-content: center; padding: 40px; background: #111; }
+        canvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        #image-canvas { background: repeating-conic-gradient(#444 0% 25%, #555 0% 50%) 50% / 20px 20px; cursor: crosshair; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        #ui-layer { pointer-events: none; }
         .hint { font-size: 11px; color: #888; margin-left: auto; display: flex; gap: 12px; }
         button { padding: 6px 12px; cursor: pointer; background: #444; color: white; border: 1px solid #555; border-radius: 4px; font-size: 12px; }
         button:hover { background: #555; }
         button.primary { background: #2e7d32; border-color: #1b5e20; }
         button.active { background: #007aff; border-color: #00c2ff; }
-        .color-preview { width: 20px; height: 20px; border: 1px solid #fff; border-radius: 3px; display: inline-block; vertical-align: middle; }
+        .alpha-color { width: 20px; height: 20px; border: 1px solid #fff; border-radius: 3px; display: inline-block; vertical-align: middle; }
         .toggle-group { display: flex; align-items: center; gap: 5px; font-size: 12px; border-left: 1px solid #444; padding-left: 10px; }
         kbd { background: #555; padding: 2px 4px; border-radius: 3px; color: #fff; font-family: monospace; }
     </style>
@@ -22,18 +25,19 @@
 <body>
 
 <div id="toolbar">
-    <button class="primary" onclick="readFromClipboard(true)">Create from Clipboard</button>
-    <button onclick="copySelection()">Copy Area</button>
-    <button onclick="zoomToFit()">Zoom to Fit</button>
-    <button onclick="flip('h')">Flip Horizontally</button>
-    <button onclick="flip('v')">Flip Vertically</button>
-    
-    <button id="picker-btn" onclick="togglePicker()">Pick Opacity Color</button>
-    <div class="color-preview" id="color-prev" style="background: transparent;"></div>
-    
+    <button class="primary" id="reset-btn">Clear canvas</button>
+    <button id="flip-horizontally-btn">Flip Horizontally</button>
+    <button id="flip-vertically-btn">Flip Vertically</button>
+    <button id="rotate-btn">Rotate</button>
+
+
     <div class="toggle-group">
         <input type="checkbox" id="transparency-toggle">
         <label for="transparency-toggle">Enable Alpha Paste</label>
+        <div class="alpha-color" id="alpha-color" style="background: transparent;"></div>
+        <div class="hint" id="hotkey-hint">
+            <span><kbd>⌥/Alt</kbd>+<kbd>Click</kbd>&nbsp;on image (disable with <kbd>Shift</kbd>)</span>
+        </div>
     </div>
 
     <div class="hint" id="hotkey-hint">
@@ -41,260 +45,365 @@
         <span><kbd>⌘/Ctrl</kbd>+<kbd>V</kbd>: Paste</span>
         <span><kbd>⌘/Ctrl</kbd>+<kbd>A</kbd>: All</span>
         <span><kbd>H</kbd>/<kbd>V</kbd>: Flip</span>
+        <span><kbd>R</kbd>: Rotate</span>
+        <span><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd>: Undo</span>
+        <span><kbd>⌘/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>: Redo</span>
     </div>
 </div>
 
-<div id="canvas-container">
-    <canvas id="canvas"></canvas>
+<div id="container">
+    <canvas id="image-canvas"></canvas>
+    <canvas id="ui-layer"></canvas>
 </div>
 
 <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    
-    let img = null; 
-    let selection = { x: 0, y: 0, w: 0, h: 0, active: false };
-    let selectedBlob = null;
-    let isDragging = false;
-    let isPickingColor = false;
-    let opacityColor = null;
+/**
+ * MODEL: State management and byte-level manipulation via Jimp
+ */
+class EmptyImage {
+    constructor() {
+        this.width = 300;
+        this.height = 150;
+    }
 
-    window.addEventListener('keydown', async (e) => {
-        const isCmdOrCtrl = e.ctrlKey || e.metaKey;
-        const key = e.key.toLowerCase();
+    clone() {
+        return this;
+    }
+}
+
+class ImageModel {
+    constructor() {
+        this.mainImage = new EmptyImage();
+        this.history = [];
+        this.redoStack = [];
+        this.selection = null; // {x, y, w, h}
+        this.alphaKey = null; // {r, g, b}
+        this.pendingCopyBlob = null;
+    }
+
+    isEmpty() {
+        return this.mainImage instanceof EmptyImage;
+    }
+
+    notEmpty() {
+        return !this.isEmpty();
+    }
+
+    async saveHistory() {
+        const clone = this.mainImage.clone();
+        this.history.push(clone);
+        if (this.history.length > 6) this.history.shift(); // Keep 5 + current
+        this.redoStack = [];
+    }
+
+    undo() {
+        if (this.history.length < 2) return null;
+        this.redoStack.push(this.history.pop());
+        this.mainImage = this.history[this.history.length - 1].clone();
+        return this.mainImage;
+    }
+
+    redo() {
+        if (this.redoStack.length === 0) return null;
+        const img = this.redoStack.pop();
+        this.history.push(img);
+        this.mainImage = img.clone();
+        return this.mainImage;
+    }
+
+    async createNew(buffer) {
+        this.mainImage = await Jimp.read(buffer);
+        this.selection = null;
+        await this.saveHistory();
+    }
+
+    async clear() {
+        this.mainImage = new EmptyImage();
+        this.selection = null;
+        await this.saveHistory();
+    }
+
+    async pasteIntoSelection(buffer) {
+        if (this.isEmpty() || !this.selection) return;
+        const pasted = await Jimp.read(buffer);
         
-        // Selection Hotkeys
-        if (isCmdOrCtrl && key === 'a') {
-            e.preventDefault();
-            if (!img) return;
-            selection = { x: 0, y: 0, w: img.width, h: img.height, active: true };
-            render();
-
-            preSaveSelectionToBlob();
-        }
-        if (isCmdOrCtrl && key === 'c') {
-            e.preventDefault(); 
-            await copySelection();
-        }
-        if (isCmdOrCtrl && key === 'v') {
-            e.preventDefault();
-            readFromClipboard();
+        if (this.alphaKey) {
+            pasted.scan(0, 0, pasted.bitmap.width, pasted.bitmap.height, (x, y, idx) => {
+                if (pasted.bitmap.data[idx] === this.alphaKey.r && 
+                    pasted.bitmap.data[idx+1] === this.alphaKey.g && 
+                    pasted.bitmap.data[idx+2] === this.alphaKey.b) {
+                    pasted.bitmap.data[idx+3] = 0;
+                }
+            });
         }
 
-        // Flip Hotkeys
-        if (selection.active && !isCmdOrCtrl) {
-            if (key === 'h') flip('h');
-            if (key === 'v') flip('v');
-        }
-    });
-
-    function createNewMaster(bitmap) {
-        img = document.createElement('canvas');
-        img.width = bitmap.width;
-        img.height = bitmap.height;
-        img.getContext('2d').drawImage(bitmap, 0, 0);
-        canvas.width = img.width;
-        canvas.height = img.height;
-        selection.active = false;
+        pasted.resize(this.selection.w, this.selection.h);
+        this.mainImage.composite(pasted, this.selection.x, this.selection.y);
+        await this.saveHistory();
     }
 
-    function pasteIntoSelection(bitmap) {
-        const sW = Math.abs(selection.w);
-        const sH = Math.abs(selection.h);
-        const sX = selection.w < 0 ? selection.x + selection.w : selection.x;
-        const sY = selection.h < 0 ? selection.y + selection.h : selection.y;
+    async manipulateSelection(type) {
+        if (this.isEmpty() || !this.selection) return;
+        const { x, y, w, h } = this.selection;
+        let part = this.mainImage.clone().crop(x, y, w, h);
 
-        const temp = document.createElement('canvas');
-        temp.width = sW;
-        temp.height = sH;
-        const tCtx = temp.getContext('2d');
-        tCtx.drawImage(bitmap, 0, 0, sW, sH);
+        if (type === 'rotateCW') part.rotate(-90).resize(w, h);
+        else if (type === 'rotateCCW') part.rotate(90).resize(w, h);
+        else if (type === 'flipH') part.flip(true, false);
+        else if (type === 'flipV') part.flip(false, true);
 
-        if (document.getElementById('transparency-toggle').checked && opacityColor) {
-            const imageData = tCtx.getImageData(0, 0, sW, sH);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                const rMatch = Math.abs(data[i] - opacityColor.r) < 15;
-                const gMatch = Math.abs(data[i+1] - opacityColor.g) < 15;
-                const bMatch = Math.abs(data[i+2] - opacityColor.b) < 15;
-                if (rMatch && gMatch && bMatch) data[i + 3] = 0;
+        this.mainImage.composite(part, x, y);
+        await this.saveHistory();
+    }
+
+    async updateCopyBlob() {
+        if (this.isEmpty() || !this.selection) return;
+        const { x, y, w, h } = this.selection;
+        const cropped = this.mainImage.clone().crop(x, y, w, h);
+        const buffer = await cropped.getBufferAsync(Jimp.MIME_PNG);
+        this.pendingCopyBlob = new Blob([buffer], { type: 'image/png' });
+    }
+}
+
+/**
+ * VIEW: DOM/Canvas interaction
+ */
+class ImageView {
+    constructor() {
+        this.imgCanvas = document.getElementById('image-canvas');
+        this.uiCanvas = document.getElementById('ui-layer');
+        this.imgCtx = this.imgCanvas.getContext('2d');
+        this.uiCtx = this.uiCanvas.getContext('2d');
+        this.zoom = 1;
+
+        this.alphaColor = document.getElementById('alpha-color');
+        this.transparencyToggle = document.getElementById('transparency-toggle');
+        this.transparencyToggle.checked = false;
+    }
+
+    clearCanvas() {
+        this.imgCtx.clearRect(0, 0, this.imgCanvas.width, this.imgCanvas.height);
+        this.zoom = 1;
+        this.resize(300, 150);
+    }
+
+    render(jimpImage, selection) {
+        if (!jimpImage) return;
+        const { width, height, data } = jimpImage.bitmap;
+        
+        // Auto zoom logic
+        const margin = 50;
+        const scaleW = (window.innerWidth - margin) / width;
+        const scaleH = (window.innerHeight - margin) / height;
+        this.zoom = Math.min(1, scaleW, scaleH);
+
+        this.resize(width, height);
+
+        const imageData = new ImageData(new Uint8ClampedArray(data), width, height);
+        this.imgCtx.putImageData(imageData, 0, 0);
+        
+        this.drawSelection(selection);
+    }
+
+    resize(width, height) {
+        this.imgCanvas.width = width;
+        this.imgCanvas.height = height;
+        this.imgCanvas.style.width = (width * this.zoom) + 'px';
+        this.imgCanvas.style.height = (height * this.zoom) + 'px';
+
+        this.uiCanvas.width = width;
+        this.uiCanvas.height = height;
+        this.uiCanvas.style.width = (width * this.zoom) + 'px';
+        this.uiCanvas.style.height = (height * this.zoom) + 'px';
+    }
+
+    drawSelection(sel) {
+        this.uiCtx.clearRect(0, 0, this.uiCanvas.width, this.uiCanvas.height);
+        if (!sel) return;
+        this.uiCtx.strokeStyle = '#00ff00';
+        // Adjust line width based on zoom so it always looks "1px" or "2px"
+        this.uiCtx.lineWidth = 2 / this.zoom; 
+        this.uiCtx.setLineDash([5 / this.zoom, 5 / this.zoom]);
+        this.uiCtx.strokeRect(sel.x, sel.y, sel.w, sel.h);
+    }
+
+    setAlphaColor(color) {
+        const newColor = color ? 
+          `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)` : 'transparent';
+
+        this.alphaColor.style.background = newColor;
+        this.transparencyToggle.checked = !!color;
+    }
+}
+
+/**
+ * CONTROLLER: Orchestrates View and Model
+ */
+class EditorController {
+    constructor(model, view) {
+        this.model = model;
+        this.view = view;
+        this.isSelecting = false;
+        this.startPos = { x: 0, y: 0 };
+
+        this.initListeners();
+    }
+
+    initListeners() {
+        window.addEventListener('paste', e => this.handlePaste(e));
+        window.addEventListener('keydown', e => this.handleKeyDown(e));
+        window.addEventListener('mousedown', e => this.handleMouseDown(e));
+        window.addEventListener('mousemove', e => this.handleMouseMove(e));
+        window.addEventListener('mouseup', () => this.handleMouseUp());
+        window.addEventListener('copy', e => this.handleCopy(e));
+        document.getElementById('reset-btn')
+            .addEventListener('click', e => this.handleReset(e));
+        document.getElementById('transparency-toggle')
+            .addEventListener('click', e => this.handleTransparencyToggle(e));
+        document.getElementById('flip-horizontally-btn')
+            .addEventListener('click', e => this.handleManipulate('flipH'));
+        document.getElementById('flip-vertically-btn')
+            .addEventListener('click', e => this.handleManipulate('flipV'));
+        document.getElementById('rotate-btn')
+            .addEventListener('click', e => this.handleManipulate('rotateCW'));
+    }
+
+    async handlePaste(e) {
+        const item = Array.from(e.clipboardData.items)
+                          .find(x => x.type.indexOf('image') !== -1 
+                                      && x.kind === 'file');
+        if (!item) return;
+
+        const blob = item.getAsFile();
+        const buffer = await blob.arrayBuffer();
+
+        if (this.model.selection) {
+            await this.model.pasteIntoSelection(buffer);
+        } else {
+            await this.model.createNew(buffer);
+        }
+        this.view.render(this.model.mainImage, this.model.selection);
+    }
+
+    handleCopy(e) {
+        if (this.model.pendingCopyBlob) {
+            const item = new ClipboardItem({ "image/png": this.model.pendingCopyBlob });
+            navigator.clipboard.write([item]);
+            e.preventDefault();
+        }
+    }
+
+    handleKeyDown(e) {
+        const key = e.key.toLowerCase();
+        const ctrl = e.ctrlKey || e.metaKey;
+        const shift = e.shiftKey;
+
+        //Undo
+        if (ctrl && key === 'z') {
+            const img = shift ? this.model.redo() : this.model.undo();
+            if (img) this.view.render(img, this.model.selection);
+        }
+        //Redo
+        else if (ctrl && key === 'y') {
+            const img = this.model.redo();
+            if (img) this.view.render(img, this.model.selection);
+        }
+        //Select All
+        else if (ctrl && key === 'a') {
+            e.preventDefault();
+            if (this.model.notEmpty()) {
+                this.model.selection = { x: 0, y: 0, w: this.model.mainImage.bitmap.width, h: this.model.mainImage.bitmap.height };
+                this.model.updateCopyBlob();
+                this.view.drawSelection(this.model.selection);
             }
-            tCtx.putImageData(imageData, 0, 0);
         }
-
-        img.getContext('2d').drawImage(temp, sX, sY);
+        // Deselect
+        else if (e.key === 'Escape') {
+            this.model.selection = null;
+            this.view.drawSelection(null);
+        }
+        else if (this.model.selection) {
+            if (key === 'r') this.model.manipulateSelection(shift ? 'rotateCCW' : 'rotateCW');
+            if (key === 'h' && !ctrl) this.model.manipulateSelection('flipH');
+            if (key === 'v' && ! ctrl) this.model.manipulateSelection('flipV');
+            this.view.render(this.model.mainImage, this.model.selection);
+        }
     }
 
-    function togglePicker() {
-        isPickingColor = !isPickingColor;
-        document.getElementById('picker-btn').classList.toggle('active', isPickingColor);
-        canvas.style.cursor = isPickingColor ? 'crosshair' : 'default';
+    getCanvasCoords(e) {
+        const rect = this.view.imgCanvas.getBoundingClientRect();
+        return {
+            x: Math.floor((e.clientX - rect.left) / this.view.zoom),
+            y: Math.floor((e.clientY - rect.top) / this.view.zoom)
+        };
     }
 
-    canvas.addEventListener('mousedown', e => {
-        if (!img) return;
-        const rect = canvas.getBoundingClientRect();
-        const sx = canvas.width / rect.width;
-        const sy = canvas.height / rect.height;
-        const mouseX = (e.clientX - rect.left) * sx;
-        const mouseY = (e.clientY - rect.top) * sy;
-
-        if (isPickingColor) {
-            const pixel = img.getContext('2d').getImageData(mouseX, mouseY, 1, 1).data;
-            opacityColor = { r: pixel[0], g: pixel[1], b: pixel[2] };
-            document.getElementById('color-prev').style.background = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
-            togglePicker();
+    handleMouseDown(e) {
+        if(this.model.isEmpty()) return;
+        if (e.altKey) {
+            const coords = this.getCanvasCoords(e);
+            const idx = (coords.y * this.model.mainImage.bitmap.width + coords.x) * 4;
+            const d = this.model.mainImage.bitmap.data;
+            if (e.shiftKey) {
+                this.model.alphaKey = null;
+                console.log("Alpha blending disabled");
+            } else {
+                this.model.alphaKey = { r: d[idx], g: d[idx+1], b: d[idx+2] };
+                console.log("Alpha key set to:", this.model.alphaKey);
+            }
+            this.view.setAlphaColor(this.model.alphaKey);
             return;
         }
 
-        selection.x = mouseX; selection.y = mouseY;
-        selection.w = 0; selection.h = 0;
-        isDragging = true; selection.active = true;
-    });
-
-    window.addEventListener('mousemove', e => {
-        if (!isDragging) return;
-        const rect = canvas.getBoundingClientRect();
-        const sx = canvas.width / rect.width;
-        const sy = canvas.height / rect.height;
-        selection.w = ((e.clientX - rect.left) * sx) - selection.x;
-        selection.h = ((e.clientY - rect.top) * sy) - selection.y;
-        render();
-    });
-
-    window.addEventListener('mouseup', () => { 
-        isDragging = false; 
-        if(Math.abs(selection.w) < 2 && Math.abs(selection.h) < 2) selection.active = false;
-        render(); 
-
-        preSaveSelectionToBlob();
-    });
-
-    function zoomToFit() {
-        if (!img) return;
-        const container = document.getElementById('canvas-container');
-        const ratio = Math.min((container.clientWidth - 50) / img.width, (container.clientHeight - 50) / img.height, 1);
-        canvas.style.width = (img.width * ratio) + 'px';
-        canvas.style.height = (img.height * ratio) + 'px';
-        render();
+        this.isSelecting = true;
+        this.startPos = this.getCanvasCoords(e);
     }
 
-    async function preSaveSelectionToBlob() {
-        if (!selection.active || !img) return null;
-        const sX = selection.w < 0 ? selection.x + selection.w : selection.x;
-        const sY = selection.h < 0 ? selection.y + selection.h : selection.y;
-        const sW = Math.abs(selection.w); const sH = Math.abs(selection.h);
-        const temp = document.createElement('canvas');
-        temp.width = sW; temp.height = sH;
-        temp.getContext('2d').drawImage(img, sX, sY, sW, sH, 0, 0, sW, sH);
-        
-        const getBlob = (canvas) => new Promise(resolve => canvas.toBlob(resolve));
-
-        selectedBlob = await getBlob(temp);
-
+    handleMouseMove(e) {
+        if (!this.isSelecting) return;
+        const current = this.getCanvasCoords(e);
+        this.model.selection = {
+            x: Math.min(this.startPos.x, current.x),
+            y: Math.min(this.startPos.y, current.y),
+            w: Math.abs(current.x - this.startPos.x),
+            h: Math.abs(current.y - this.startPos.y)
+        };
+        this.view.drawSelection(this.model.selection);
     }
 
-    async function copySelection() {
-        if (selection.active) {      
-            if (!selection.active || !img) return;
-            
-            const blob = selectedBlob;
-
-            if (!blob) {
-                alert('Unable to create clipboard image.');
-                return;
-            }
-
-            try {
-                const mime = blob.type || 'image/png';
-                const data = [new ClipboardItem({ [blob.type]: blob })];
-
-                if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
-                    try {
-                        await navigator.clipboard.write(data);
-                        return;
-                    } catch (err) {
-                        console.warn('navigator.clipboard.write failed', err);
-                    }
-                }
-
-                throw new Error('Clipboard image copy is not supported in this browser.');
-            } catch (err) {
-                console.error(err);
-                alert('Copy failed: ' + (err && err.message ? err.message : 'unknown error'));
-            }
+    async handleMouseUp() {
+        this.isSelecting = false;
+        if (this.model.selection && (this.model.selection.w === 0 || this.model.selection.h === 0)) {
+            this.model.selection = null;
+        }
+        if (this.model.selection) {
+            await this.model.updateCopyBlob();
         }
     }
 
-    async function readFromClipboard(ignoreSelection = false) {
-        try {
-            const clipboardItems = await navigator.clipboard.read();
-            for (const item of clipboardItems) {
-                for (const type of item.types) {
-                    if (type.startsWith('image/')) {
-                        const blob = await item.getType(type);
-                        const bitmap = await createImageBitmap(blob);
-                        
-                        if (!ignoreSelection && selection.active) {
-                            pasteIntoSelection(bitmap);
-                            render();
-                        }
-                        else {
-                            createNewMaster(bitmap);
-                            render();
-                            zoomToFit();
-                        }
+    handleManipulate(type) {
+        if (!this.model.selection) return;
+        this.model.manipulateSelection(type);
+        this.view.render(this.model.mainImage, this.model.selection);
+    }
 
-                        return;
-                    }
-                }
-            }
-            alert("No image found in clipboard!");
-        } catch (err) {
-            console.error(err);
-            alert("Clipboard access denied. Please allow permissions or use Ctrl+V.");
+    handleReset() {
+        this.model.clear();
+        this.view.clearCanvas();
+    }
+
+    handleTransparencyToggle(e) {
+        if (!this.model.alphaKey) {
+            this.model.alphaKey = { r: 255, g: 255, b: 255 };
+        } else {
+            this.model.alphaKey = null;
         }
+        this.view.setAlphaColor(this.model.alphaKey);
     }
+}
 
-    function flip(axis) {
-        if (!img || !selection.active) return;
-        
-        // Normalize coordinates to handle "backward" dragging
-        const sW = Math.abs(selection.w); 
-        const sH = Math.abs(selection.h);
-        const sX = selection.w < 0 ? selection.x + selection.w : selection.x;
-        const sY = selection.h < 0 ? selection.y + selection.h : selection.y;
-
-        const temp = document.createElement('canvas');
-        temp.width = sW; 
-        temp.height = sH;
-        temp.getContext('2d').drawImage(img, sX, sY, sW, sH, 0, 0, sW, sH);
-        
-        const mainCtx = img.getContext('2d');
-        mainCtx.save();
-        // Move to the center of the selection area
-        mainCtx.translate(sX + sW/2, sY + sH/2);
-        mainCtx.scale(axis === 'h' ? -1 : 1, axis === 'v' ? -1 : 1);
-        // Draw the captured area back, centered
-        mainCtx.drawImage(temp, -sW/2, -sH/2, sW, sH);
-        mainCtx.restore();
-        render();
-    }
-
-    function render() {
-        if (!img) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-        if (selection.active) {
-            const rect = canvas.getBoundingClientRect();
-            const scale = canvas.width / rect.width;
-            ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 2 * scale;
-            ctx.setLineDash([5 * scale, 5 * scale]);
-            ctx.strokeRect(selection.x, selection.y, selection.w, selection.h);
-            ctx.setLineDash([]);
-        }
-    }
+// Instantiate
+const app = new EditorController(new ImageModel(), new ImageView());
 </script>
 </body>
 </html>
