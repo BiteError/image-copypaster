@@ -9,3 +9,14 @@ global.ClipboardItem = class ClipboardItem {
 };
 
 global.navigator.clipboard = { write: vi.fn() };
+
+// jsdom has no real canvas backend, so it doesn't implement ImageData either
+// (contrary to the controller-view-tests PRD's assumption of "a real jsdom
+// ImageData global") - stub the same constructor shape ImageView.toImageData relies on.
+global.ImageData = class ImageData {
+  constructor(data, width, height) {
+    this.data = data;
+    this.width = width;
+    this.height = height;
+  }
+};
