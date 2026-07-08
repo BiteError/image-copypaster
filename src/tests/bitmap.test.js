@@ -115,6 +115,16 @@ test('Make color transparent zeroes alpha for matching pixels only', async () =>
   expect(data[4 + 3]).toBe(0); // second pixel is white, made transparent
 });
 
+test('mask_ellipse zeroes alpha for pixels outside the inscribed ellipse only', async () => {
+  const bitmap = await create_solid_bitmap(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+  bitmap.mask_ellipse();
+
+  const data = bitmap.data();
+  expect(data[3]).toBe(0); // corner (0,0), outside the inscribed ellipse
+  const centerIdx = (5 * 10 + 5) * 4;
+  expect(data[centerIdx + 3]).toBe(255); // center (5,5), inside the ellipse, untouched
+});
+
 test('getBufferAsync returns a PNG buffer that can be decoded back', async () => {
   const bitmap = await create_test_bitmap();
   const buffer = await bitmap.getBufferAsync();

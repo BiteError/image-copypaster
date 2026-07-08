@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import ImageModel from '../image_model.js'
+import { CreateBitmap } from '../bitmap.js'
 import { create_solid_png_buffer } from './test_helpers.js'
 
 const WHITE = { r: 255, g: 255, b: 255 };
@@ -11,6 +12,7 @@ test('starts empty with no history or selection', () => {
   expect(model.isEmpty()).toBeTruthy();
   expect(model.notEmpty()).toBeFalsy();
   expect(model.selection).toBeNull();
+  expect(model.shapeMode).toBe('rect');
   expect(model.alphaKey).toBeNull();
   expect(model.pendingCopyBlob).toBeNull();
   expect(model.history).toHaveLength(0);
@@ -123,6 +125,17 @@ test('pasteIntoSelection composites the pasted image into the selection only', a
   expect(model.mainImage.pixel_color(150, 150)).toStrictEqual(WHITE);
 });
 
+test('pasteIntoSelection with an ellipse selection only overwrites pixels inside the ellipse', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+  model.selection = { type: 'ellipse', x: 0, y: 0, w: 100, h: 100 };
+
+  await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
+
+  expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(BLACK); // center, inside the ellipse
+  expect(model.mainImage.pixel_color(0, 0)).toStrictEqual(WHITE); // corner, outside the ellipse, untouched
+});
+
 test('pasteIntoSelection strips pixels matching the alpha key instead of pasting them', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
@@ -165,6 +178,19 @@ test('manipulateSelection flipH flips the selected region in place', async () =>
   expect(model.mainImage.height).toBe(200);
   expect(model.mainImage.pixel_color(0, 0)).toStrictEqual(WHITE);
   expect(model.mainImage.pixel_color(299, 0)).toStrictEqual(BLACK);
+});
+
+test('manipulateSelection flipH on an ellipse selection only affects pixels inside the ellipse', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+  model.selection = { type: 'rect', x: 0, y: 0, w: 50, h: 100 };
+  await model.pasteIntoSelection(await create_solid_png_buffer(50, 100, BLACK)); // left half black, right half white
+
+  model.selection = { type: 'ellipse', x: 0, y: 0, w: 100, h: 100 };
+  await model.manipulateSelection('flipH');
+
+  expect(model.mainImage.pixel_color(10, 50)).toStrictEqual(WHITE); // interior pixel, flipped from black to white
+  expect(model.mainImage.pixel_color(0, 0)).toStrictEqual(BLACK); // corner, outside the ellipse, untouched by the flip
 });
 
 test('manipulateSelection rotateCW rotates the selected region and keeps its footprint', async () => {
@@ -224,4 +250,19 @@ test('updateCopyBlob captures the selection as a PNG blob', async () => {
   expect(model.pendingCopyBlob).toBeInstanceOf(Blob);
   expect(model.pendingCopyBlob.type).toBe('image/png');
   expect(model.pendingCopyBlob.size).toBeGreaterThan(0);
+});
+
+test('updateCopyBlob on an ellipse selection makes bounding-box corners transparent', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+  model.selection = { type: 'ellipse', x: 0, y: 0, w: 100, h: 100 };
+
+  await model.updateCopyBlob();
+
+  const buffer = await model.pendingCopyBlob.arrayBuffer();
+  const decoded = await CreateBitmap(buffer);
+  const data = decoded.data();
+  expect(data[3]).toBe(0); // corner (0,0), outside the ellipse
+  const centerIdx = (50 * 100 + 50) * 4;
+  expect(data[centerIdx + 3]).toBe(255); // center (50,50), inside the ellipse, opaque
 });

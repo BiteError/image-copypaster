@@ -25,6 +25,9 @@ function stubCanvasContext() {
     clearRect: vi.fn(),
     strokeRect: vi.fn(),
     setLineDash: vi.fn(),
+    beginPath: vi.fn(),
+    ellipse: vi.fn(),
+    stroke: vi.fn(),
     strokeStyle: null,
     lineWidth: null,
   };

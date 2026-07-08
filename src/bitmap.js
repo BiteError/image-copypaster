@@ -87,6 +87,20 @@ export class JimpBitmap {
         return this.update();
     }
 
+    mask_ellipse(){
+        const data = this.data();
+        const rx = this.width / 2;
+        const ry = this.height / 2;
+        this.jimp_container.scan(0, 0, this.width, this.height, (x, y, idx) => {
+            const nx = (x + 0.5 - rx) / rx;
+            const ny = (y + 0.5 - ry) / ry;
+            if (nx * nx + ny * ny > 1) {
+                data[idx+3] = 0;
+            }
+        });
+        return this.update();
+    }
+
     pixel_color(x, y){
         const data = this.data();
         const idx = (y * this.width + x) * 4;

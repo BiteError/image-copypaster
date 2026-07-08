@@ -164,7 +164,7 @@ describe('drawSelection', () => {
 
   test('draws a stroked, dashed rect at the selection bounds', () => {
     view.zoom = 2;
-    const sel = { x: 10, y: 20, w: 30, h: 40 };
+    const sel = { type: 'rect', x: 10, y: 20, w: 30, h: 40 };
 
     view.drawSelection(sel);
 
@@ -173,6 +173,39 @@ describe('drawSelection', () => {
     expect(uiCtx.lineWidth).toBe(1); // 2 / zoom(2)
     expect(uiCtx.setLineDash).toHaveBeenCalledWith([2.5, 2.5]); // 5 / zoom(2)
     expect(uiCtx.strokeRect).toHaveBeenCalledWith(10, 20, 30, 40);
+    expect(uiCtx.ellipse).not.toHaveBeenCalled();
+  });
+
+  test('draws a stroked, dashed ellipse at the selection bounds when shape is ellipse', () => {
+    view.zoom = 2;
+    const sel = { type: 'ellipse', x: 10, y: 20, w: 30, h: 40 };
+
+    view.drawSelection(sel);
+
+    expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
+    expect(uiCtx.strokeStyle).toBe('#00ff00');
+    expect(uiCtx.lineWidth).toBe(1); // 2 / zoom(2)
+    expect(uiCtx.setLineDash).toHaveBeenCalledWith([2.5, 2.5]); // 5 / zoom(2)
+    expect(uiCtx.ellipse).toHaveBeenCalledWith(25, 40, 15, 20, 0, 0, Math.PI * 2);
+    expect(uiCtx.strokeRect).not.toHaveBeenCalled();
+  });
+});
+
+describe('setShapeMode', () => {
+  test('shows the rectangle symbol and clears the active class for rect mode', () => {
+    view.setShapeMode('ellipse');
+
+    view.setShapeMode('rect');
+
+    expect(view.shapeToggle.textContent).toBe('Shape: ▭');
+    expect(view.shapeToggle.classList.contains('active')).toBe(false);
+  });
+
+  test('shows the ellipse symbol and sets the active class for ellipse mode', () => {
+    view.setShapeMode('ellipse');
+
+    expect(view.shapeToggle.textContent).toBe('Shape: ⬭');
+    expect(view.shapeToggle.classList.contains('active')).toBe(true);
   });
 });
 

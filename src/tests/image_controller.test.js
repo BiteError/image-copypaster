@@ -14,6 +14,7 @@ function makeFakeView() {
     drawSelection: vi.fn(),
     setAlphaColor: vi.fn(),
     clearCanvas: vi.fn(),
+    setShapeMode: vi.fn(),
     imgCanvas: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
     zoom: 1,
   };
@@ -165,7 +166,7 @@ describe('handleKeyDown', () => {
 
     dispatchKey('a', { ctrlKey: true });
 
-    expect(model.selection).toStrictEqual({ x: 0, y: 0, w: 120, h: 80 });
+    expect(model.selection).toStrictEqual({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
     expect(updateCopyBlobSpy).toHaveBeenCalled();
     expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
   });
@@ -175,6 +176,16 @@ describe('handleKeyDown', () => {
 
     expect(model.selection).toBeNull();
     expect(fakeView.drawSelection).not.toHaveBeenCalled();
+  });
+
+  test('Ctrl/Cmd+A always selects a rectangle, even when shape mode is ellipse', async () => {
+    await model.createNew(await create_solid_png_buffer(120, 80, WHITE));
+    model.shapeMode = 'ellipse';
+
+    dispatchKey('a', { ctrlKey: true });
+
+    expect(model.selection).toStrictEqual({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
+    expect(model.shapeMode).toBe('ellipse'); // Select All neither reads nor writes shape mode
   });
 
   test('Escape clears isSelecting and selection', () => {
@@ -222,6 +233,54 @@ describe('handleKeyDown', () => {
     dispatchKey('r');
 
     expect(manipulateSpy).not.toHaveBeenCalled();
+  });
+
+  test('spacebar toggles shape mode and updates the toolbar indicator', () => {
+    expect(model.shapeMode).toBe('rect');
+
+    dispatchKey(' ');
+
+    expect(model.shapeMode).toBe('ellipse');
+    expect(fakeView.setShapeMode).toHaveBeenCalledWith('ellipse');
+
+    dispatchKey(' ');
+
+    expect(model.shapeMode).toBe('rect');
+    expect(fakeView.setShapeMode).toHaveBeenCalledWith('rect');
+  });
+
+  test('shape mode set by spacebar determines the shape of the next selection drawn', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    dispatchKey(' ');
+
+    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 40, clientY: 40 }));
+
+    expect(model.selection.type).toBe('ellipse');
+  });
+
+  test('spacebar pressed mid-drag switches the in-progress selection shape live', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 40, clientY: 40 }));
+    expect(model.selection.type).toBe('rect');
+    fakeView.drawSelection.mockClear();
+
+    dispatchKey(' ');
+
+    expect(model.selection.type).toBe('ellipse');
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
+  });
+});
+
+describe('shape-toggle-btn', () => {
+  test('clicking toggles shape mode the same way spacebar does', () => {
+    expect(model.shapeMode).toBe('rect');
+
+    document.getElementById('shape-toggle-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.shapeMode).toBe('ellipse');
+    expect(fakeView.setShapeMode).toHaveBeenCalledWith('ellipse');
   });
 });
 
@@ -296,7 +355,7 @@ describe('handleMouseMove', () => {
 
     dispatchMouseMove({ clientX: 20, clientY: 30 });
 
-    expect(model.selection).toStrictEqual({ x: 20, y: 30, w: 30, h: 20 });
+    expect(model.selection).toStrictEqual({ type: 'rect', x: 20, y: 30, w: 30, h: 20 });
     expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
   });
 });

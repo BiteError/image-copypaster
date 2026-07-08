@@ -9,7 +9,8 @@ export default class ImageModel {
         this.mainImage = CreateEmptyBitmap();
         this.history = [];
         this.redoStack = [];
-        this.selection = null; // {x, y, w, h}
+        this.selection = null; // {type: 'rect'|'ellipse', x, y, w, h}
+        this.shapeMode = 'rect'; // shape of the next selection drawn
         this.alphaKey = null; // {r, g, b}
         this.pendingCopyBlob = null;
     }
@@ -66,6 +67,7 @@ export default class ImageModel {
         }
 
         pasted.resize(this.selection.w, this.selection.h);
+        if (this.selection.type === 'ellipse') pasted.mask_ellipse();
         this.mainImage.composite(pasted, this.selection.x, this.selection.y);
         await this.saveHistory();
     }
@@ -80,6 +82,8 @@ export default class ImageModel {
         else if (type === 'flipH') part.flip_horizontal();
         else if (type === 'flipV') part.flip_vertical();
 
+        if (this.selection.type === 'ellipse') part.mask_ellipse();
+
         this.mainImage.composite(part, x, y);
         await this.saveHistory();
     }
@@ -88,6 +92,7 @@ export default class ImageModel {
         if (this.isEmpty() || !this.selection) return;
         const { x, y, w, h } = this.selection;
         const cropped = this.mainImage.clone().crop(x, y, w, h);
+        if (this.selection.type === 'ellipse') cropped.mask_ellipse();
         const buffer = await cropped.getBufferAsync();
         this.pendingCopyBlob = new Blob([buffer], { type: 'image/png' });
     }

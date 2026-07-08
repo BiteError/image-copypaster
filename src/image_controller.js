@@ -9,6 +9,7 @@ export default class ImageController {
         this.startPos = { x: 0, y: 0 };
 
         this.initListeners();
+        this.view.setShapeMode(this.model.shapeMode);
     }
 
     render_view(){
@@ -32,6 +33,8 @@ export default class ImageController {
             .addEventListener('click', e => this.handleManipulate('flipV'));
         document.getElementById('rotate-btn')
             .addEventListener('click', e => this.handleManipulate('rotateCW'));
+        document.getElementById('shape-toggle-btn')
+            .addEventListener('click', e => this.toggleShapeMode());
     }
 
     async handlePaste(e) {
@@ -78,7 +81,7 @@ export default class ImageController {
         else if (ctrl && key === 'a') {
             e.preventDefault();
             if (this.model.notEmpty()) {
-                this.model.selection = { x: 0, y: 0, w: this.model.mainImage.width, h: this.model.mainImage.height };
+                this.model.selection = { type: 'rect', x: 0, y: 0, w: this.model.mainImage.width, h: this.model.mainImage.height };
                 this.model.updateCopyBlob();
                 this.view.drawSelection(this.model.selection);
             }
@@ -88,6 +91,11 @@ export default class ImageController {
             this.isSelecting = false;
             this.model.selection = null;
             this.view.drawSelection(null);
+        }
+        // Toggle selection shape
+        else if (key === ' ') {
+            e.preventDefault();
+            this.toggleShapeMode();
         }
         else if (this.model.selection) {
             let direction = null;
@@ -100,6 +108,15 @@ export default class ImageController {
                 this.render_view();
             }
         }
+    }
+
+    toggleShapeMode() {
+        this.model.shapeMode = this.model.shapeMode === 'ellipse' ? 'rect' : 'ellipse';
+        if (this.isSelecting && this.model.selection) {
+            this.model.selection = { ...this.model.selection, type: this.model.shapeMode };
+            this.view.drawSelection(this.model.selection);
+        }
+        this.view.setShapeMode(this.model.shapeMode);
     }
 
     getCanvasCoords(e) {
@@ -135,6 +152,7 @@ export default class ImageController {
         
         const current = this.getCanvasCoords(e);
         this.model.selection = {
+            type: this.model.shapeMode,
             x: Math.min(this.startPos.x, current.x),
             y: Math.min(this.startPos.y, current.y),
             w: Math.abs(current.x - this.startPos.x),

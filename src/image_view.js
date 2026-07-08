@@ -12,6 +12,8 @@ export default class ImageView {
         this.alphaColor = document.getElementById('alpha-color');
         this.transparencyToggle = document.getElementById('transparency-toggle');
         this.transparencyToggle.checked = false;
+
+        this.shapeToggle = document.getElementById('shape-toggle-btn');
     }
 
     clearCanvas() {
@@ -60,9 +62,20 @@ export default class ImageView {
         if (!sel) return;
         this.uiCtx.strokeStyle = '#00ff00';
         // Adjust line width based on zoom so it always looks "1px" or "2px"
-        this.uiCtx.lineWidth = 2 / this.zoom; 
+        this.uiCtx.lineWidth = 2 / this.zoom;
         this.uiCtx.setLineDash([5 / this.zoom, 5 / this.zoom]);
-        this.uiCtx.strokeRect(sel.x, sel.y, sel.w, sel.h);
+        if (sel.type === 'ellipse') {
+            this.uiCtx.beginPath();
+            this.uiCtx.ellipse(sel.x + sel.w / 2, sel.y + sel.h / 2, sel.w / 2, sel.h / 2, 0, 0, Math.PI * 2);
+            this.uiCtx.stroke();
+        } else {
+            this.uiCtx.strokeRect(sel.x, sel.y, sel.w, sel.h);
+        }
+    }
+
+    setShapeMode(mode) {
+        this.shapeToggle.textContent = mode === 'ellipse' ? 'Shape: ⬭' : 'Shape: ▭';
+        this.shapeToggle.classList.toggle('active', mode === 'ellipse');
     }
 
     setAlphaColor(color) {
