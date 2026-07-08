@@ -5,16 +5,6 @@ export async function CreateBitmap(blob) {
    return new JimpBitmap(jimpImage);
 }
 
-export async function CreateBitmapFromArray(array, width, height) {
-    const pixelBuffer = Buffer.from(array); 
-    const jimpImage = await Jimp.fromBitmap({
-        data: pixelBuffer,
-        width: width,
-        height: height
-    });
-    return new JimpBitmap(jimpImage);
-}
-
 export function CreateEmptyBitmap() {
    return new EmptyBitmap();
 }
