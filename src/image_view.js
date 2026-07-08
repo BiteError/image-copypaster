@@ -12,6 +12,8 @@ export default class ImageView {
         this.alphaColor = document.getElementById('alpha-color');
         this.transparencyToggle = document.getElementById('transparency-toggle');
         this.transparencyToggle.checked = false;
+        this.toleranceSlider = document.getElementById('tolerance-slider');
+        this.toleranceSlider.disabled = true;
 
         this.shapeToggle = document.getElementById('shape-toggle-btn');
     }
@@ -84,5 +86,6 @@ export default class ImageView {
 
         this.alphaColor.style.background = newColor;
         this.transparencyToggle.checked = !!color;
+        this.toleranceSlider.disabled = !color;
     }
 }

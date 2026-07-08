@@ -443,3 +443,14 @@ describe('handleTransparencyToggle / transparency-toggle', () => {
     expect(fakeView.setAlphaColor).toHaveBeenCalledWith(null);
   });
 });
+
+describe('handleToleranceChange / tolerance-slider', () => {
+  test('updates model.colorTolerance from the slider value', () => {
+    const slider = document.getElementById('tolerance-slider');
+    slider.value = '42';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(model.colorTolerance).toBe(42);
+  });
+});

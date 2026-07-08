@@ -225,6 +225,20 @@ describe('setAlphaColor', () => {
     expect(view.alphaColor.style.background).toBe('transparent');
     expect(view.transparencyToggle.checked).toBe(false);
   });
+
+  test('enables the tolerance slider when a color is given', () => {
+    view.setAlphaColor({ r: 10, g: 20, b: 30 });
+
+    expect(view.toleranceSlider.disabled).toBe(false);
+  });
+
+  test('disables the tolerance slider when color is null', () => {
+    view.setAlphaColor({ r: 10, g: 20, b: 30 });
+
+    view.setAlphaColor(null);
+
+    expect(view.toleranceSlider.disabled).toBe(true);
+  });
 });
 
 describe('clearCanvas', () => {

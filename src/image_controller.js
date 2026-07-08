@@ -27,6 +27,8 @@ export default class ImageController {
             .addEventListener('click', e => this.handleReset(e));
         document.getElementById('transparency-toggle')
             .addEventListener('click', e => this.handleTransparencyToggle(e));
+        document.getElementById('tolerance-slider')
+            .addEventListener('input', e => this.handleToleranceChange(e));
         document.getElementById('flip-horizontally-btn')
             .addEventListener('click', e => this.handleManipulate('flipH'));
         document.getElementById('flip-vertically-btn')
@@ -215,5 +217,9 @@ export default class ImageController {
             this.model.alphaKey = null;
         }
         this.view.setAlphaColor(this.model.alphaKey);
+    }
+
+    handleToleranceChange(e) {
+        this.model.colorTolerance = Number(e.target.value);
     }
 }

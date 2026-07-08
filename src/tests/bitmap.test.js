@@ -115,6 +115,30 @@ test('Make color transparent zeroes alpha for matching pixels only', async () =>
   expect(data[4 + 3]).toBe(0); // second pixel is white, made transparent
 });
 
+test('make_color_transparent with a tolerance also strips a near-matching pixel', async () => {
+  const bitmap = await create_solid_bitmap(2, 1, { r: 255, g: 255, b: 255 }, { r: 245, g: 255, b: 255 }); // corner is 10 away
+  bitmap.make_color_transparent({ r: 255, g: 255, b: 255 }, 10);
+
+  const data = bitmap.data();
+  expect(data[3]).toBe(0); // corner pixel, distance 10, within tolerance 10
+});
+
+test('make_color_transparent leaves a pixel just outside the tolerance radius untouched', async () => {
+  const bitmap = await create_solid_bitmap(2, 1, { r: 255, g: 255, b: 255 }, { r: 244, g: 255, b: 255 }); // corner is 11 away
+  bitmap.make_color_transparent({ r: 255, g: 255, b: 255 }, 10);
+
+  const data = bitmap.data();
+  expect(data[3]).toBe(255); // corner pixel, distance 11, outside tolerance 10
+});
+
+test('make_color_transparent defaults to exact match only, ignoring a near-matching pixel', async () => {
+  const bitmap = await create_solid_bitmap(2, 1, { r: 255, g: 255, b: 255 }, { r: 245, g: 255, b: 255 }); // corner is 10 away
+  bitmap.make_color_transparent({ r: 255, g: 255, b: 255 });
+
+  const data = bitmap.data();
+  expect(data[3]).toBe(255); // corner pixel, no tolerance passed, untouched despite being close
+});
+
 test('mask_ellipse zeroes alpha for pixels outside the inscribed ellipse only', async () => {
   const bitmap = await create_solid_bitmap(10, 10, { r: 200, g: 100, b: 50, a: 255 });
   bitmap.mask_ellipse();

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import ImageModel from '../image_model.js'
+import ImageModel, { toleranceToDistance } from '../image_model.js'
 import { CreateBitmap } from '../bitmap.js'
 import { create_solid_png_buffer } from './test_helpers.js'
 
@@ -14,6 +14,7 @@ test('starts empty with no history or selection', () => {
   expect(model.selection).toBeNull();
   expect(model.shapeMode).toBe('rect');
   expect(model.alphaKey).toBeNull();
+  expect(model.colorTolerance).toBe(10);
   expect(model.pendingCopyBlob).toBeNull();
   expect(model.history).toHaveLength(0);
 });
@@ -147,6 +148,35 @@ test('pasteIntoSelection strips pixels matching the alpha key instead of pasting
   // the whole pasted patch matched the alpha key, so nothing shows through
   expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
   expect(model.mainImage.pixel_color(149, 149)).toStrictEqual(WHITE);
+});
+
+test('pasteIntoSelection strips near-matching pixels when colorTolerance allows it', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+  model.selection = { x: 50, y: 50, w: 10, h: 10 };
+  model.alphaKey = BLACK;
+  model.colorTolerance = 100; // widest possible tolerance
+
+  await model.pasteIntoSelection(await create_solid_png_buffer(10, 10, { r: 50, g: 50, b: 50 })); // close to black, not exact
+
+  expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE); // stripped to transparent, white shows through
+});
+
+test('pasteIntoSelection with colorTolerance 0 keeps today\'s exact-match-only behavior', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+  model.selection = { x: 50, y: 50, w: 10, h: 10 };
+  model.alphaKey = BLACK;
+  model.colorTolerance = 0;
+
+  await model.pasteIntoSelection(await create_solid_png_buffer(10, 10, { r: 50, g: 50, b: 50 })); // close to black, not exact
+
+  expect(model.mainImage.pixel_color(50, 50)).toStrictEqual({ r: 50, g: 50, b: 50 }); // not stripped, pasted color shows
+});
+
+test('toleranceToDistance maps the 0-100 slider onto the max RGB distance', () => {
+  expect(toleranceToDistance(0)).toBe(0);
+  expect(toleranceToDistance(100)).toBeCloseTo(Math.sqrt(3 * 255 * 255));
 });
 
 test('manipulateSelection is a no-op on an empty model', async () => {

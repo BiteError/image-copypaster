@@ -21,12 +21,16 @@ Extract the current Selection's pixels and place them on the system clipboard as
 _Avoid_: export
 
 **Alpha Key**:
-A single color, sampled from the Canvas by the user, designated as the transparency key. Any pixel of this color in a subsequently pasted image is made transparent when Alpha Paste is enabled.
+A single color, sampled from the Canvas by the user, designated as the transparency key. Any pixel of this color, or within the configured Tolerance of it, in a subsequently pasted image is made transparent when Alpha Paste is enabled.
 _Avoid_: chroma key, transparency color
 
 **Alpha Paste**:
 The mode, toggled by the user, in which an active Alpha Key is applied to the next Paste — stripping matching pixels to transparent as the image lands in the Selection.
 _Avoid_: color-to-alpha, transparency toggle
+
+**Tolerance**:
+A user-configurable 0-100 value scoping how close a pixel's color must be to the Alpha Key (by RGB distance) to count as a match during Alpha Paste. Zero matches the Alpha Key color exactly; higher values also catch near-miss pixels such as anti-aliased edges.
+_Avoid_: threshold, fuzziness, sensitivity
 
 **Bitmap**:
 The pixel-data representation of the Canvas or of a cropped/pasted fragment, wrapping the underlying image-processing library so the rest of the app never touches it directly.

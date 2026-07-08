@@ -75,12 +75,15 @@ export class JimpBitmap {
         return this.update();
     }
 
-    make_color_transparent(color){
+    make_color_transparent(color, tolerance = 0){
         const data = this.data();
+        // Compare squared distances to avoid a sqrt per pixel; tolerance=0 still requires an exact match.
+        const toleranceSq = tolerance * tolerance;
         this.jimp_container.scan(0, 0, this.width, this.height, (x, y, idx) => {
-            if (data[idx] === color.r && 
-                data[idx+1] === color.g && 
-                data[idx+2] === color.b) {
+            const dr = data[idx] - color.r;
+            const dg = data[idx+1] - color.g;
+            const db = data[idx+2] - color.b;
+            if (dr*dr + dg*dg + db*db <= toleranceSq) {
                 data[idx+3] = 0;
             }
         });

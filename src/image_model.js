@@ -1,6 +1,14 @@
 import { CreateBitmap } from './bitmap.js'
 import { CreateEmptyBitmap } from './bitmap.js'
 
+// Largest possible Euclidean RGB distance (black vs. white), used to map the
+// 0-100 tolerance slider onto make_color_transparent's raw distance argument.
+const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255);
+
+export function toleranceToDistance(tolerancePercent) {
+    return (tolerancePercent / 100) * MAX_RGB_DISTANCE;
+}
+
 /**
  * MODEL: State management and byte-level manipulation via Jimp
  */
@@ -12,6 +20,7 @@ export default class ImageModel {
         this.selection = null; // {type: 'rect'|'ellipse', x, y, w, h}
         this.shapeMode = 'rect'; // shape of the next selection drawn
         this.alphaKey = null; // {r, g, b}
+        this.colorTolerance = 10; // 0-100, how close a color must be to alphaKey to match
         this.pendingCopyBlob = null;
     }
 
@@ -63,7 +72,7 @@ export default class ImageModel {
         const pasted = await CreateBitmap(buffer);
         
         if (this.alphaKey) {
-            pasted.make_color_transparent(this.alphaKey);
+            pasted.make_color_transparent(this.alphaKey, toleranceToDistance(this.colorTolerance));
         }
 
         pasted.resize(this.selection.w, this.selection.h);

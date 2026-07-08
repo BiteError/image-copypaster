@@ -158,6 +158,10 @@ button[data-hint]:focus::after {
   padding-left: 10px;
 }
 
+.toggle-group input[type="range"] {
+  width: 80px;
+}
+
 kbd {
   background: #555;
   padding: 2px 4px;
