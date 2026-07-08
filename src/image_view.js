@@ -33,9 +33,14 @@ export default class ImageView {
 
         this.resize(width, height);
 
-        this.imgCtx.putImageData(bitmap.to_image_data(), 0, 0);
+        this.imgCtx.putImageData(this.toImageData(bitmap), 0, 0);
         
         this.drawSelection(selection);
+    }
+
+    toImageData(bitmap) {
+        const arr = new Uint8ClampedArray(bitmap.data());
+        return new ImageData(arr, bitmap.width, bitmap.height);
     }
 
     resize(width, height) {

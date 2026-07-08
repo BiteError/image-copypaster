@@ -49,11 +49,6 @@ export class JimpBitmap {
         return this.jimp_container.bitmap.data;
     }
 
-    to_image_data() {
-        const arr = new Uint8ClampedArray(this.data());
-        return new ImageData(arr, this.width, this.height);
-    }
-
     clone() {
         return new JimpBitmap(this.jimp_container.clone());
     }
