@@ -139,11 +139,14 @@ export default class ImageController {
         this.closeHelpPanel();
     }
 
-    toggleShapeMode() {
+    async toggleShapeMode() {
         this.model.shapeMode = this.model.shapeMode === 'ellipse' ? 'rect' : 'ellipse';
-        if (this.isSelecting && this.model.selection) {
+        if (this.model.selection) {
             this.model.selection = { ...this.model.selection, type: this.model.shapeMode };
             this.view.drawSelection(this.model.selection);
+            if (!this.isSelecting) {
+                await this.model.updateCopyBlob();
+            }
         }
         this.view.setShapeMode(this.model.shapeMode);
     }

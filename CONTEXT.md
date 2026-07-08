@@ -9,8 +9,12 @@ The single image currently loaded in the editor; the whole workspace that a Sele
 _Avoid_: workspace, main image, mainImage
 
 **Selection**:
-A rectangular region of the Canvas, drawn by dragging or via Select All, that scopes where a Paste lands and which pixels a manipulation (flip/rotate) affects. Rendered on its own transparent overlay canvas on top of the Canvas's image so redrawing the selection border during a drag never has to repaint the underlying image; the border stays visible after a Paste lands.
+A rectangular or elliptical region of the Canvas, drawn by dragging or via Select All, that scopes where a Paste lands and which pixels a manipulation (flip/rotate) affects. Rendered on its own transparent overlay canvas on top of the Canvas's image so redrawing the selection border during a drag never has to repaint the underlying image; the border stays visible after a Paste lands. Its Shape can be switched at any time — mid-drag or after it's already drawn — and the switch applies retroactively to the current Selection, not just to the next one drawn.
 _Avoid_: area, region, bounding box
+
+**Shape**:
+Whether a Selection is rectangular or elliptical. Toggled via the Space shortcut or the toolbar's shape button, both of which flip the Shape of the current Selection (if one exists) in addition to setting the default for the next Selection drawn.
+_Avoid_: shape mode, selection type
 
 **Paste**:
 Insert an image from the system clipboard. With no Selection, the pasted image becomes the Canvas; with an active Selection, the pasted image is resized to fit and composited into it.

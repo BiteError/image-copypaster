@@ -265,8 +265,26 @@ describe('handleKeyDown', () => {
     window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 40, clientY: 40 }));
     expect(model.selection.type).toBe('rect');
     fakeView.drawSelection.mockClear();
+    const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
 
     dispatchKey(' ');
+
+    expect(model.selection.type).toBe('ellipse');
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
+    expect(updateCopyBlobSpy).not.toHaveBeenCalled();
+  });
+
+  test('spacebar pressed after a selection is finalized switches its shape and refreshes the copy blob', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 40, clientY: 40 }));
+    window.dispatchEvent(new Event('mouseup'));
+    expect(controller.isSelecting).toBe(false);
+    expect(model.selection.type).toBe('rect');
+    const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+
+    dispatchKey(' ');
+    await vi.waitFor(() => expect(updateCopyBlobSpy).toHaveBeenCalled());
 
     expect(model.selection.type).toBe('ellipse');
     expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
@@ -281,6 +299,18 @@ describe('shape-toggle-btn', () => {
 
     expect(model.shapeMode).toBe('ellipse');
     expect(fakeView.setShapeMode).toHaveBeenCalledWith('ellipse');
+  });
+
+  test('clicking after a selection is finalized switches its shape and refreshes the copy blob', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    model.selection = { type: 'rect', x: 0, y: 0, w: 10, h: 10 };
+    const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+
+    document.getElementById('shape-toggle-btn').dispatchEvent(new Event('click', { bubbles: true }));
+    await vi.waitFor(() => expect(updateCopyBlobSpy).toHaveBeenCalled());
+
+    expect(model.selection.type).toBe('ellipse');
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
   });
 });
 

@@ -10,6 +10,7 @@ A lightweight, browser-based image editor. It makes image handling as easy as te
 *   **Smart Auto-Zoom**: Automatically fits large images to the browser window while maintaining the original resolution for editing.
 *   **Non-Destructive UI**: The selection borders (marching ants) maintain a consistent visual thickness regardless of the zoom level.
 *   **Symmetry Tools**: Flip selections vertically or horizontally without affecting the rest of the canvas.
+*   **Switchable Selection Shape**: Toggle a selection between rectangle and ellipse with **Space** or the toolbar's shape button — works mid-drag or on an already-drawn selection.
 
 ## ⌨️ Hotkeys
 
@@ -24,7 +25,8 @@ The application supports both **macOS (⌘)** and **Windows/Linux (Ctrl)** short
 | **H** | Flip horizontally selected area. |
 | **R** | Rotate right selected area. |
 | **Shift + R** | Rotate left selected area. |
-| **Drag Mouse** | Create a custom rectangular selection. |
+| **Drag Mouse** | Create a custom rectangular or elliptical selection. |
+| **Space** | Switch the selection shape between rectangle and ellipse — applies to an in-progress drag or an already-drawn selection. |
 | **Opt/Alt + Click** | Select the alpha color. |
 | **Shift + Opt/Alt + Click** | Disable the alpha color. |
 
@@ -38,7 +40,7 @@ Use your mouse to drag a box over an area or select with **Cmd/Ctrl + A** the wh
 *   Press **Cmd/Ctrl + C** to copy selected area into your clipboard.
 *   Press **Cmd/Ctrl + V** to replace that section with a new image from your clipboard.
 *   Press **H / V / R** to transform selected area.
-*   Press **Space** to change area shape from square to ellipse.
+*   Press **Space**, or click the toolbar's shape button, to switch the selection between rectangle and ellipse — this affects the selection you already have, not just the next one you draw.
 
 ### 3. Using Alpha Paste
 1.  While holding **Opt/Alt** click a pixel on your image that represents the color you want to make transparent (e.g., a green screen background).
