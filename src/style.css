@@ -19,6 +19,7 @@ body {
   flex-wrap: wrap;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
   z-index: 10;
+  position: relative;
 }
 
 #container {
@@ -50,14 +51,6 @@ canvas {
   pointer-events: none;
 }
 
-.hint {
-  font-size: 11px;
-  color: #888;
-  margin-left: auto;
-  display: flex;
-  gap: 12px;
-}
-
 button {
   padding: 6px 12px;
   cursor: pointer;
@@ -66,6 +59,7 @@ button {
   border: 1px solid #555;
   border-radius: 4px;
   font-size: 12px;
+  position: relative;
 }
 
 button:hover {
@@ -80,6 +74,70 @@ button.primary {
 button.active {
   background: #007aff;
   border-color: #00c2ff;
+}
+
+button[data-hint]::after {
+  content: attr(data-hint);
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: #555;
+  color: #fff;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 20;
+}
+
+button[data-hint]:hover::after,
+button[data-hint]:focus::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+#help-btn {
+  margin-left: auto;
+}
+
+.help-panel {
+  position: absolute;
+  top: 100%;
+  right: 10px;
+  margin-top: 8px;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 30;
+}
+
+.help-panel.hidden {
+  display: none;
+}
+
+.help-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.help-panel li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .alpha-color {

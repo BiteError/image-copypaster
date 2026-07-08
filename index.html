@@ -12,30 +12,32 @@
 
   <div id="toolbar">
     <button class="primary" id="reset-btn">Clear canvas</button>
-    <button id="flip-horizontally-btn">Flip Horizontally</button>
-    <button id="flip-vertically-btn">Flip Vertically</button>
-    <button id="rotate-btn">Rotate</button>
-    <button id="shape-toggle-btn">Shape: ▭</button>
+    <button id="flip-horizontally-btn" data-hint="(H)">Flip Horizontally</button>
+    <button id="flip-vertically-btn" data-hint="(V)">Flip Vertically</button>
+    <button id="rotate-btn" data-hint="(R)">Rotate</button>
+    <button id="shape-toggle-btn" data-hint="(Space)">Shape: ▭</button>
 
 
     <div class="toggle-group">
-      <input type="checkbox" id="transparency-toggle">
+      <input type="checkbox" id="transparency-toggle" data-hint="(Alt + Click)">
       <label for="transparency-toggle">Enable Alpha Paste</label>
       <div class="alpha-color" id="alpha-color" style="background: transparent;"></div>
-      <div class="hint" id="hotkey-hint">
-        <span><kbd>⌥/Alt</kbd>+<kbd>Click</kbd>&nbsp;on image (disable with <kbd>Shift</kbd>)</span>
-      </div>
     </div>
 
-    <div class="hint" id="hotkey-hint">
-      <span><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd>: Copy</span>
-      <span><kbd>⌘/Ctrl</kbd>+<kbd>V</kbd>: Paste</span>
-      <span><kbd>⌘/Ctrl</kbd>+<kbd>A</kbd>: All</span>
-      <span><kbd>H</kbd>/<kbd>V</kbd>: Flip</span>
-      <span><kbd>R</kbd>: Rotate</span>
-      <span><kbd>Space</kbd>: Toggle shape</span>
-      <span><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd>: Undo</span>
-      <span><kbd>⌘/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>: Redo</span>
+    <button id="help-btn" aria-label="Keyboard shortcuts">?</button>
+    <div class="help-panel hidden" id="help-panel" role="dialog" aria-label="Keyboard shortcuts">
+      <ul>
+        <li><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd> Copy</li>
+        <li><kbd>⌘/Ctrl</kbd>+<kbd>V</kbd> Paste</li>
+        <li><kbd>⌘/Ctrl</kbd>+<kbd>A</kbd> Select all</li>
+        <li><kbd>H</kbd>/<kbd>V</kbd> Flip</li>
+        <li><kbd>R</kbd> Rotate</li>
+        <li><kbd>Space</kbd> Toggle shape</li>
+        <li><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd> Undo</li>
+        <li><kbd>⌘/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo</li>
+        <li><kbd>⌥/Alt</kbd>+<kbd>Click</kbd> on image to choose and</li>
+        <li>enable alpha-color (disable with <kbd>Shift</kbd>)</li>
+      </ul>
     </div>
   </div>
 

@@ -35,6 +35,9 @@ export default class ImageController {
             .addEventListener('click', e => this.handleManipulate('rotateCW'));
         document.getElementById('shape-toggle-btn')
             .addEventListener('click', e => this.toggleShapeMode());
+        document.getElementById('help-btn')
+            .addEventListener('click', e => this.toggleHelpPanel());
+        window.addEventListener('click', e => this.handleOutsideHelpClick(e));
     }
 
     async handlePaste(e) {
@@ -91,11 +94,17 @@ export default class ImageController {
             this.isSelecting = false;
             this.model.selection = null;
             this.view.drawSelection(null);
+            this.closeHelpPanel();
         }
         // Toggle selection shape
         else if (key === ' ') {
             e.preventDefault();
             this.toggleShapeMode();
+        }
+        // Toggle keyboard shortcuts panel
+        else if (e.key === '?') {
+            e.preventDefault();
+            this.toggleHelpPanel();
         }
         else if (this.model.selection) {
             let direction = null;
@@ -108,6 +117,22 @@ export default class ImageController {
                 this.render_view();
             }
         }
+    }
+
+    toggleHelpPanel() {
+        document.getElementById('help-panel').classList.toggle('hidden');
+    }
+
+    closeHelpPanel() {
+        document.getElementById('help-panel').classList.add('hidden');
+    }
+
+    handleOutsideHelpClick(e) {
+        const panel = document.getElementById('help-panel');
+        const helpBtn = document.getElementById('help-btn');
+        if (panel.classList.contains('hidden')) return;
+        if (panel.contains(e.target) || helpBtn.contains(e.target)) return;
+        this.closeHelpPanel();
     }
 
     toggleShapeMode() {
