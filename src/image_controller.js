@@ -74,11 +74,13 @@ export default class ImageController {
 
         //Undo
         if (ctrl && key === 'z') {
+            e.preventDefault();
             const img = shift ? this.model.redo() : this.model.undo();
             if (img) this.render_view();
         }
         //Redo
         else if (ctrl && key === 'y') {
+            e.preventDefault();
             const img = this.model.redo();
             if (img) this.render_view();
         }
