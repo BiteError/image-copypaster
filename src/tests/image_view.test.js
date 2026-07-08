@@ -47,13 +47,14 @@ describe('render', () => {
     expect(view.uiCanvas.height).toBe(bitmap.height);
   });
 
-  test('caps zoom at 1 (never upscales) for a bitmap smaller than the window', async () => {
+  test('scales zoom up proportionally for a bitmap smaller than the window on both axes', async () => {
     stubWindowSize(50000, 50000);
     const bitmap = await create_test_bitmap(); // 300x200, tiny relative to window
 
     view.render(bitmap, null);
 
-    expect(view.zoom).toBe(1);
+    // margin 50 -> available 49950x49950; scaleW = 49950/300 = 166.5, scaleH = 49950/200 = 249.75
+    expect(view.zoom).toBe(166.5);
   });
 
   test('scales zoom down proportionally when the bitmap exceeds the window on both axes', async () => {
@@ -65,6 +66,37 @@ describe('render', () => {
 
     // margin 50 -> available 450x450; scaleW = 450/1000 = 0.45, scaleH = 450/800 = 0.5625
     expect(view.zoom).toBe(0.45);
+  });
+
+  test('constrains zoom by the tighter axis when the bitmap is narrow but tall', async () => {
+    stubWindowSize(1000, 1000);
+    const bitmap = await create_test_bitmap();
+    bitmap.resize(100, 400);
+
+    view.render(bitmap, null);
+
+    // margin 50 -> available 950x950; scaleW = 950/100 = 9.5, scaleH = 950/400 = 2.375
+    expect(view.zoom).toBe(2.375);
+  });
+
+  test('constrains zoom by the tighter axis when the bitmap is wide but short', async () => {
+    stubWindowSize(1000, 1000);
+    const bitmap = await create_test_bitmap();
+    bitmap.resize(400, 100);
+
+    view.render(bitmap, null);
+
+    // margin 50 -> available 950x950; scaleW = 950/400 = 2.375, scaleH = 950/100 = 9.5
+    expect(view.zoom).toBe(2.375);
+  });
+
+  test('lands on exactly zoom 1 when the bitmap exactly matches the available window space', async () => {
+    stubWindowSize(350, 250); // margin 50 -> available 300x200, matching the bitmap exactly
+    const bitmap = await create_test_bitmap(); // 300x200
+
+    view.render(bitmap, null);
+
+    expect(view.zoom).toBe(1);
   });
 
   test('calls through to drawSelection with the given selection', async () => {

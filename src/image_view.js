@@ -29,7 +29,7 @@ export default class ImageView {
         const margin = 50;
         const scaleW = (window.innerWidth - margin) / width;
         const scaleH = (window.innerHeight - margin) / height;
-        this.zoom = Math.min(1, scaleW, scaleH);
+        this.zoom = Math.min(scaleW, scaleH);
 
         this.resize(width, height);
 
