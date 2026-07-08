@@ -20,9 +20,10 @@ export default class ImageView {
         this.resize(300, 150);
     }
 
-    render(jimpImage, selection) {
-        if (!jimpImage) return;
-        const { width, height, data } = jimpImage.bitmap;
+    render(bitmap, selection) {
+        if (!bitmap) return;
+        const width = bitmap.width;
+        const height = bitmap.height;
         
         // Auto zoom logic
         const margin = 50;
@@ -32,8 +33,7 @@ export default class ImageView {
 
         this.resize(width, height);
 
-        const imageData = new ImageData(new Uint8ClampedArray(data), width, height);
-        this.imgCtx.putImageData(imageData, 0, 0);
+        this.imgCtx.putImageData(bitmap.to_image_data(), 0, 0);
         
         this.drawSelection(selection);
     }

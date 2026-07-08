@@ -11,6 +11,10 @@ export default class ImageController {
         this.initListeners();
     }
 
+    render_view(){
+        this.view.render(this.model.mainImage, this.model.selection);
+    }
+
     initListeners() {
         window.addEventListener('paste', e => this.handlePaste(e));
         window.addEventListener('keydown', e => this.handleKeyDown(e));
@@ -44,7 +48,7 @@ export default class ImageController {
         } else {
             await this.model.createNew(buffer);
         }
-        this.view.render(this.model.mainImage, this.model.selection);
+        this.render_view();
     }
 
     handleCopy(e) {
@@ -63,32 +67,38 @@ export default class ImageController {
         //Undo
         if (ctrl && key === 'z') {
             const img = shift ? this.model.redo() : this.model.undo();
-            if (img) this.view.render(img, this.model.selection);
+            if (img) this.render_view();
         }
         //Redo
         else if (ctrl && key === 'y') {
             const img = this.model.redo();
-            if (img) this.view.render(img, this.model.selection);
+            if (img) this.render_view();
         }
         //Select All
         else if (ctrl && key === 'a') {
             e.preventDefault();
             if (this.model.notEmpty()) {
-                this.model.selection = { x: 0, y: 0, w: this.model.mainImage.bitmap.width, h: this.model.mainImage.bitmap.height };
+                this.model.selection = { x: 0, y: 0, w: this.model.mainImage.width, h: this.model.mainImage.height };
                 this.model.updateCopyBlob();
                 this.view.drawSelection(this.model.selection);
             }
         }
         // Deselect
         else if (e.key === 'Escape') {
+            this.isSelecting = false;
             this.model.selection = null;
             this.view.drawSelection(null);
         }
         else if (this.model.selection) {
-            if (key === 'r') this.model.manipulateSelection(shift ? 'rotateCCW' : 'rotateCW');
-            if (key === 'h' && !ctrl) this.model.manipulateSelection('flipH');
-            if (key === 'v' && ! ctrl) this.model.manipulateSelection('flipV');
-            this.view.render(this.model.mainImage, this.model.selection);
+            let direction = null;
+            if (key === 'r' && !ctrl) direction = shift ? 'rotateCCW' : 'rotateCW';
+            if (key === 'h' && !ctrl) direction = 'flipH';
+            if (key === 'v' && !ctrl) direction = 'flipV';
+
+            if (direction){
+                this.model.manipulateSelection(direction);
+                this.render_view();
+            }
         }
     }
 
@@ -102,27 +112,27 @@ export default class ImageController {
 
     handleMouseDown(e) {
         if(this.model.isEmpty()) return;
-        if (e.altKey) {
-            const coords = this.getCanvasCoords(e);
-            const idx = (coords.y * this.model.mainImage.bitmap.width + coords.x) * 4;
-            const d = this.model.mainImage.bitmap.data;
-            if (e.shiftKey) {
-                this.model.alphaKey = null;
-                console.log("Alpha blending disabled");
-            } else {
-                this.model.alphaKey = { r: d[idx], g: d[idx+1], b: d[idx+2] };
-                console.log("Alpha key set to:", this.model.alphaKey);
-            }
-            this.view.setAlphaColor(this.model.alphaKey);
+
+        if (!e.altKey){
+            this.isSelecting = true;
+            this.startPos = this.getCanvasCoords(e);
             return;
         }
 
-        this.isSelecting = true;
-        this.startPos = this.getCanvasCoords(e);
+        if (e.shiftKey) {
+            this.model.alphaKey = null;
+            console.log("Alpha blending disabled");
+        } else {
+            const coords = this.getCanvasCoords(e);
+            this.model.alphaKey = this.model.mainImage.pixel_color(coords.x, coords.y);
+            console.log("Alpha key set to:", this.model.alphaKey);
+        }
+        this.view.setAlphaColor(this.model.alphaKey);
     }
 
     handleMouseMove(e) {
         if (!this.isSelecting) return;
+        
         const current = this.getCanvasCoords(e);
         this.model.selection = {
             x: Math.min(this.startPos.x, current.x),
@@ -134,6 +144,7 @@ export default class ImageController {
     }
 
     async handleMouseUp() {
+        if (!this.isSelecting) return;
         this.isSelecting = false;
         if (this.model.selection && (this.model.selection.w === 0 || this.model.selection.h === 0)) {
             this.model.selection = null;
@@ -146,7 +157,7 @@ export default class ImageController {
     handleManipulate(type) {
         if (!this.model.selection) return;
         this.model.manipulateSelection(type);
-        this.view.render(this.model.mainImage, this.model.selection);
+        this.render_view();
     }
 
     handleReset() {
