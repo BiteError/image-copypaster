@@ -9,7 +9,7 @@ The single image currently loaded in the editor; the whole workspace that a Sele
 _Avoid_: workspace, main image, mainImage
 
 **Selection**:
-A rectangular region of the Canvas, drawn by dragging or via Select All, that scopes where a Paste lands and which pixels a manipulation (flip/rotate) affects.
+A rectangular region of the Canvas, drawn by dragging or via Select All, that scopes where a Paste lands and which pixels a manipulation (flip/rotate) affects. Rendered on its own transparent overlay canvas on top of the Canvas's image so redrawing the selection border during a drag never has to repaint the underlying image; the border stays visible after a Paste lands.
 _Avoid_: area, region, bounding box
 
 **Paste**:
