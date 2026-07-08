@@ -38,9 +38,10 @@ Use your mouse to drag a box over an area or select with **Cmd/Ctrl + A** the wh
 *   Press **Cmd/Ctrl + C** to copy selected area into your clipboard.
 *   Press **Cmd/Ctrl + V** to replace that section with a new image from your clipboard.
 *   Press **H / V / R** to transform selected area.
+*   Press **Space** to change area shape from square to ellipse.
 
 ### 3. Using Alpha Paste
-1.  While holding **Opt/ALt** click a pixel on your image that represents the color you want to make transparent (e.g., a green screen background).
+1.  While holding **Opt/Alt** click a pixel on your image that represents the color you want to make transparent (e.g., a green screen background).
 2.  Check the **Enable Alpha Paste** box.
 3.  Paste a new image. The sampled color will be filtered out, allowing the background to show through.
 4.  Disable Alpha Paste clicking on checkbox or clicking on image holding the **Shift+Opt/ALt**.
