@@ -98,7 +98,7 @@ export class JimpBitmap {
     }
 
     crop(x, y, w, h){
-        const cropped = this.jimp_container.crop({x : x, y: y, w: w, h: h});
+        this.jimp_container.crop({x : x, y: y, w: w, h: h});
         return this.update();
     }
 

@@ -180,6 +180,22 @@ test('manipulateSelection rotateCW rotates the selected region and keeps its foo
   expect(model.mainImage.pixel_color(99, 0)).toStrictEqual(BLACK);
 });
 
+test('manipulateSelection rotateCW resizes a non-square selection back to its original footprint', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(200, 100, WHITE));
+  model.selection = { x: 0, y: 0, w: 100, h: 100 };
+  await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK)); // left half black, right half white
+
+  model.selection = { x: 0, y: 0, w: 200, h: 100 }; // non-square: the whole canvas
+  await model.manipulateSelection('rotateCW');
+
+  expect(model.mainImage.width).toBe(200);
+  expect(model.mainImage.height).toBe(100);
+  // a left/right split rotates 90deg CW into a top/bottom split
+  expect(model.mainImage.pixel_color(50, 10)).toStrictEqual(BLACK);
+  expect(model.mainImage.pixel_color(50, 90)).toStrictEqual(WHITE);
+});
+
 test('updateCopyBlob is a no-op on an empty model', async () => {
   const model = new ImageModel();
   model.selection = { x: 0, y: 0, w: 100, h: 100 };
