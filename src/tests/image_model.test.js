@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import ImageModel, { toleranceToDistance } from '../image_model.js'
+import ImageModel from '../image_model.js'
 import Selection from '../selection.js'
 import { CreateBitmap } from '../bitmap.js'
 import { create_solid_png_buffer } from './test_helpers.js'
@@ -170,11 +170,6 @@ test('commitFloatingLayer bakes the model\'s live alphaKey/colorTolerance into m
 
   // keyed-out pixels are fully transparent, so compositing them leaves the white background showing through
   expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
-});
-
-test('toleranceToDistance maps the 0-100 slider onto the max RGB distance', () => {
-  expect(toleranceToDistance(0)).toBe(0);
-  expect(toleranceToDistance(100)).toBeCloseTo(Math.sqrt(3 * 255 * 255));
 });
 
 test('manipulateSelection is a no-op on an empty model', async () => {

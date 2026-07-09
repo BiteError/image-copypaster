@@ -1,7 +1,13 @@
 import { expect, test } from 'vitest'
 import { CreateBitmap } from '../bitmap.js'
 import { CreateEmptyBitmap } from '../bitmap.js'
+import { toleranceToDistance } from '../bitmap.js'
 import { create_test_bitmap, create_solid_bitmap, create_solid_png_buffer } from './test_helpers.js'
+
+test('toleranceToDistance maps the 0-100 slider onto the max RGB distance', () => {
+  expect(toleranceToDistance(0)).toBe(0);
+  expect(toleranceToDistance(100)).toBeCloseTo(Math.sqrt(3 * 255 * 255));
+});
 
 test('Returns a proper height and width for empty bitmap', () => {
   const bitmap = CreateEmptyBitmap();

@@ -2,8 +2,6 @@ import { CreateBitmap } from './bitmap.js'
 import { CreateEmptyBitmap } from './bitmap.js'
 import Selection from './selection.js'
 
-export { toleranceToDistance } from './bitmap.js'
-
 /**
  * MODEL: State management and byte-level manipulation via Jimp
  */

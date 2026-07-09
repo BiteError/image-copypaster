@@ -249,8 +249,7 @@ export default class ImageController {
         const coords = this.getCanvasCoords(e);
         const sel = this.model.selection;
         if (this.model.hasFloatingLayer() && sel.contains(coords)) {
-            const preview = sel.preview(this.model.alphaKey, this.model.colorTolerance);
-            this.model.alphaKey = preview.pixel_color(coords.x - sel.x, coords.y - sel.y);
+            this.model.alphaKey = sel.colorAt(coords, this.model.alphaKey, this.model.colorTolerance);
         } else {
             this.model.alphaKey = this.model.mainImage.pixel_color(coords.x, coords.y);
         }

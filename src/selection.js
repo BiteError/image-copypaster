@@ -193,4 +193,10 @@ export default class Selection {
 
         return bmp;
     }
+
+    // Samples the color at a canvas coordinate from the live, color-keyed preview -
+    // used for Alt+click sampling when the click lands inside a Floating Layer.
+    colorAt(coords, alphaKey, colorTolerance) {
+        return this.preview(alphaKey, colorTolerance).pixel_color(coords.x - this.x, coords.y - this.y);
+    }
 }

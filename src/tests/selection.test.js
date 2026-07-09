@@ -241,6 +241,25 @@ describe('preview', () => {
   });
 });
 
+describe('colorAt', () => {
+  const WHITE = { r: 255, g: 255, b: 255 };
+
+  test('translates canvas coords to local space before sampling the preview', async () => {
+    const sel = makeMarquee(20, 20, 40, 40);
+    const original = await create_solid_bitmap(40, 40, WHITE, BLACK); // corner (0,0) is BLACK
+    sel.enterFloating(original);
+
+    expect(sel.colorAt({ x: 20, y: 20 })).toStrictEqual(BLACK); // canvas (20,20) -> local (0,0), the keyed corner
+    expect(sel.colorAt({ x: 21, y: 20 })).toStrictEqual(WHITE); // canvas (21,20) -> local (1,0), everywhere else
+  });
+
+  test('applies the given alphaKey/colorTolerance, same as preview', async () => {
+    const sel = await makeFloating(20, 20, 40, 40); // solid BLACK
+
+    expect(sel.colorAt({ x: 30, y: 30 }, BLACK, 0)).toStrictEqual(BLACK); // pixel_color reads {r,g,b}, unaffected by alpha=0
+  });
+});
+
 describe('resize gestures (beginResize/applyDrag)', () => {
   // default selection box: x20 y20 w40 h40
   test('dragging a corner handle resizes both axes, anchored at the opposite corner', () => {
