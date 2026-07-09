@@ -250,11 +250,9 @@ export default class ImageController {
 
         if (e.shiftKey) {
             this.model.alphaKey = null;
-            console.log("Alpha blending disabled");
         } else {
             const coords = this.getCanvasCoords(e);
             this.model.alphaKey = this.model.mainImage.pixel_color(coords.x, coords.y);
-            console.log("Alpha key set to:", this.model.alphaKey);
         }
         this.view.setAlphaColor(this.model.alphaKey);
     }
