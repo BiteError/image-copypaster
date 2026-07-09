@@ -15,6 +15,7 @@ export default class ImageController {
     }
 
     render_view(){
+        if(this.model.mainImage.isEmpty()) return;
         this.view.render(this.model.mainImage, this.model.selection, this.model.alphaKey, this.model.colorTolerance);
     }
 

@@ -970,12 +970,21 @@ describe('handleTransparencyToggle / transparency-toggle', () => {
     expect(fakeView.setAlphaColor).toHaveBeenCalledWith(null);
   });
 
-  test('does not error when there is no floating layer', () => {
+  test('does not error when there is no floating layer', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
     model.alphaKey = null;
 
     document.getElementById('transparency-toggle').dispatchEvent(new Event('click', { bubbles: true }));
 
     expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+  });
+
+  test('does not render when the canvas is empty', () => {
+    model.alphaKey = null;
+
+    document.getElementById('transparency-toggle').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(fakeView.render).not.toHaveBeenCalled();
   });
 
   test('re-renders live when a floating layer is active', async () => {

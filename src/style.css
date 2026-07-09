@@ -76,7 +76,17 @@ button.active {
   border-color: #00c2ff;
 }
 
-button[data-hint]::after {
+.hint-wrap {
+  display: inline-flex;
+}
+
+button[data-hint],
+.hint-wrap[data-hint] {
+  position: relative;
+}
+
+button[data-hint]::after,
+.hint-wrap[data-hint]::after {
   content: attr(data-hint);
   position: absolute;
   top: 100%;
@@ -97,7 +107,9 @@ button[data-hint]::after {
 }
 
 button[data-hint]:hover::after,
-button[data-hint]:focus::after {
+button[data-hint]:focus-visible::after,
+.hint-wrap[data-hint]:hover::after,
+.hint-wrap[data-hint]:has(:focus-visible)::after {
   opacity: 1;
   visibility: visible;
 }
