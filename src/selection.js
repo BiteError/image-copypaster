@@ -1,6 +1,6 @@
 // Handle name -> which axes it drives, and which side of the anchor it starts on
 // (-1/+1). Used to detect when a drag has crossed past the anchor (the opposite,
-// fixed corner/edge), which means the floating layer should mirror through.
+// fixed corner/edge), which means the selection should mirror through.
 const HANDLE_GEOMETRY = {
     nw: { hasH: true, signH: -1, hasV: true, signV: -1 },
     n: { hasH: false, hasV: true, signV: -1 },
@@ -13,30 +13,30 @@ const HANDLE_GEOMETRY = {
 };
 
 /**
- * MODEL (internal seam of ImageModel): a pasted-in image floating over a selection,
- * owning its own transform and drag-gesture geometry. Depends only on Bitmap.
+ * MODEL (internal seam of ImageModel): a Selection on the Canvas. Pure geometry
+ * (`marquee`) until `original` is loaded, at which point it also owns a non-destructive
+ * transform (`floating`) - see CONTEXT.md. Depends only on Bitmap.
  */
-export default class FloatingLayer {
-    constructor(original, { x, y, w, h }, shape) {
-        this.original = original;
+export default class Selection {
+    constructor({ x, y, w, h, type }) {
         this.x = x;
         this.y = y;
         this.w = w;
         this.h = h;
+        this.type = type;
+        this.original = null;
         this.rotation = 0;
         this.flipH = false;
         this.flipV = false;
-        this.#shape = shape;
         this.#gesture = null;
+        this.#snapshot = null;
     }
 
-    // Snapshotted at construction: toggleShapeMode commits any active floating layer
-    // first, so a floating layer's shape never needs to change mid-life.
-    #shape;
     #gesture;
+    #snapshot;
 
-    get shape() {
-        return this.#shape;
+    get isFloating() {
+        return !!this.original;
     }
 
     bounds() {
@@ -130,6 +130,45 @@ export default class FloatingLayer {
         this.#gesture = null;
     }
 
+    // Loads a bitmap as `original` and resets transform state, entering `floating`.
+    // Used directly for a one-shot marquee rotate/flip (ImageModel composites and calls
+    // exitFloating() right after); enterFloating() below wraps this for a real Paste.
+    loadOriginal(original) {
+        this.original = original;
+        this.rotation = 0;
+        this.flipH = false;
+        this.flipV = false;
+    }
+
+    // Entering floating for a real Paste: snapshots the pre-paste bounds/shape first, so
+    // Cancel can restore them - this is the same instance being mutated in place, not a
+    // separate object that Cancel could just discard.
+    enterFloating(original) {
+        this.#snapshot = { x: this.x, y: this.y, w: this.w, h: this.h, type: this.type };
+        this.loadOriginal(original);
+    }
+
+    // Discards the floating state, restoring the bounds/shape snapshotted by enterFloating.
+    cancelFloating() {
+        Object.assign(this, this.#snapshot);
+        this.#snapshot = null;
+        this.original = null;
+        this.rotation = 0;
+        this.flipH = false;
+        this.flipV = false;
+    }
+
+    // Clears floating state at the current (possibly moved/resized) bounds - used once
+    // ImageModel has baked preview() into mainImage. No snapshot restore: these bounds
+    // are the final ones, not something to revert.
+    exitFloating() {
+        this.original = null;
+        this.rotation = 0;
+        this.flipH = false;
+        this.flipV = false;
+        this.#snapshot = null;
+    }
+
     // Derives a fresh transformed copy from the untouched original bitmap every call,
     // so repeated rotate/flip/resize while floating never compounds lossy transforms
     // onto a previously-transformed copy.
@@ -144,7 +183,7 @@ export default class FloatingLayer {
 
         bmp.resize(this.w, this.h);
 
-        if (this.#shape === 'ellipse') bmp.mask_ellipse();
+        if (this.type === 'ellipse') bmp.mask_ellipse();
 
         return bmp;
     }

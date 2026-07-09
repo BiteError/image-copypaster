@@ -51,10 +51,10 @@ export default class ImageView {
 
         this.imgCtx.putImageData(this.toImageData(bitmap), 0, 0);
 
-        // ui-layer is pointer-events:none by default so normal selection drags reach
-        // image-canvas underneath; while a floating layer is active it needs to catch
-        // its own drag/handle interactions instead.
-        this.uiCanvas.style.pointerEvents = floating ? 'auto' : 'none';
+        // ui-layer is pointer-events:none by default so a fresh selection drag reaches
+        // image-canvas underneath; once a selection exists (marquee or floating) it needs
+        // to catch its own handle/drag interactions instead.
+        this.uiCanvas.style.pointerEvents = (selection || floating) ? 'auto' : 'none';
 
         this.drawSelection(selection, floating);
     }
@@ -88,6 +88,7 @@ export default class ImageView {
 
         if (!sel) return;
         this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, SELECTION_COLOR);
+        this.drawHandles(sel);
     }
 
     // Bounding-box corners + edge midpoints, in canvas coordinates. Private: only

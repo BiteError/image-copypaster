@@ -1,6 +1,6 @@
 import { CreateBitmap } from './bitmap.js'
 import { CreateEmptyBitmap } from './bitmap.js'
-import FloatingLayer from './floating_layer.js'
+import Selection from './selection.js'
 
 // Largest possible Euclidean RGB distance (black vs. white), used to map the
 // 0-100 tolerance slider onto make_color_transparent's raw distance argument.
@@ -18,56 +18,23 @@ export default class ImageModel {
         this.mainImage = CreateEmptyBitmap();
         this.history = [];
         this.redoStack = [];
-        this.selection = null; // {type: 'rect'|'ellipse', x, y, w, h}
+        this.selection = null; // Selection instance: marquee (no `original`) or floating
         this.shapeMode = 'rect'; // shape of the next selection drawn
         this.alphaKey = null; // {r, g, b}
         this.colorTolerance = 10; // 0-100, how close a color must be to alphaKey to match
         this.pendingCopyBlob = null;
-        this.floatingLayer = null; // FloatingLayer instance
     }
 
     isEmpty() {
         return this.mainImage.isEmpty();
     }
 
-    hasFloatingLayer() {
-        return !!this.floatingLayer;
-    }
-
-    floatingBounds() {
-        return this.floatingLayer.bounds();
-    }
-
-    floatingContains(coords) {
-        return this.floatingLayer.contains(coords);
-    }
-
-    floatingShape() {
-        return this.floatingLayer.shape;
-    }
-
-    beginFloatingResize(handle) {
-        this.floatingLayer.beginResize(handle);
-    }
-
-    beginFloatingMove(coords) {
-        this.floatingLayer.beginMove(coords);
-    }
-
-    applyFloatingDrag(coords, lockAspect) {
-        this.floatingLayer.applyDrag(coords, lockAspect);
-    }
-
-    endFloatingDrag() {
-        this.floatingLayer.endDrag();
-    }
-
-    nudgeFloating(dir, step) {
-        this.floatingLayer.nudge(dir, step);
-    }
-
     notEmpty() {
         return !this.isEmpty();
+    }
+
+    hasFloatingLayer() {
+        return !!this.selection && this.selection.isFloating;
     }
 
     async saveHistory() {
@@ -112,65 +79,59 @@ export default class ImageModel {
             pasted.make_color_transparent(this.alphaKey, toleranceToDistance(this.colorTolerance));
         }
 
-        this.floatingLayer = new FloatingLayer(pasted, {
-            x: this.selection.x,
-            y: this.selection.y,
-            w: this.selection.w,
-            h: this.selection.h,
-        }, this.selection.type);
+        this.selection.enterFloating(pasted);
     }
 
     getFloatingLayerPreview() {
-        if (!this.floatingLayer) return null;
-        return this.floatingLayer.preview();
+        if (!this.hasFloatingLayer()) return null;
+        return this.selection.preview();
     }
 
+    // marquee: crops fresh pixels, applies the transform once, and bakes them straight
+    // back into mainImage - one history entry per press, no persistent rotation counter.
+    // floating: the transform just accumulates on the selection in memory; nothing
+    // touches mainImage/history until an explicit commit.
     async manipulateSelection(type) {
         if (this.isEmpty() || !this.selection) return;
 
-        if (this.hasFloatingLayer()) {
-            const fl = this.floatingLayer;
-            if (type === 'rotateCW') fl.rotate('cw');
-            else if (type === 'rotateCCW') fl.rotate('ccw');
-            else if (type === 'flipH') fl.flip('h');
-            else if (type === 'flipV') fl.flip('v');
+        if (this.selection.isFloating) {
+            this.#applyTransform(type);
             return;
         }
 
         const { x, y, w, h } = this.selection;
-        let part = this.mainImage.clone().crop(x, y, w, h);
-
-        if (type === 'rotateCW') part.rotate_cw().resize(w, h);
-        else if (type === 'rotateCCW') part.rotate_ccw().resize(w, h);
-        else if (type === 'flipH') part.flip_horizontal();
-        else if (type === 'flipV') part.flip_vertical();
-
-        if (this.selection.type === 'ellipse') part.mask_ellipse();
-
-        this.mainImage.composite(part, x, y);
+        const cropped = this.mainImage.clone().crop(x, y, w, h);
+        this.selection.loadOriginal(cropped);
+        this.#applyTransform(type);
+        this.mainImage.composite(this.selection.preview(), x, y);
+        this.selection.exitFloating();
         await this.saveHistory();
     }
 
-    // Bakes the floating layer's current transform (and ellipse mask, if applicable) into
-    // mainImage, then clears it. this.selection is updated to the floating layer's final
-    // bounds so subsequent copy/manipulate operate on the region the content landed in.
+    #applyTransform(type) {
+        if (type === 'rotateCW') this.selection.rotate('cw');
+        else if (type === 'rotateCCW') this.selection.rotate('ccw');
+        else if (type === 'flipH') this.selection.flip('h');
+        else if (type === 'flipV') this.selection.flip('v');
+    }
+
+    // Bakes the floating selection's current transform (and ellipse mask, if applicable)
+    // into mainImage, then clears it. this.selection stays at its final bounds/shape, so
+    // subsequent copy/manipulate operate on the region the content landed in.
     async commitFloatingLayer() {
-        if (!this.floatingLayer) return;
-        const transformed = this.floatingLayer.preview();
-        const { x, y, w, h } = this.floatingLayer.bounds();
+        if (!this.hasFloatingLayer()) return;
+        const transformed = this.selection.preview();
+        const { x, y, w, h } = this.selection.bounds();
         this.mainImage.composite(transformed, x, y);
-        this.selection = {
-            type: this.selection ? this.selection.type : 'rect',
-            x, y, w, h,
-        };
-        this.floatingLayer = null;
+        this.selection.exitFloating();
         await this.saveHistory();
     }
 
-    // Discards the floating layer entirely - mainImage was never touched by it, so there's
-    // nothing to restore and no history entry to create.
+    // Discards the floating selection, restoring the pre-paste bounds/shape - mainImage
+    // was never touched by it, so there's nothing to restore there and no history entry.
     cancelFloatingLayer() {
-        this.floatingLayer = null;
+        if (!this.hasFloatingLayer()) return;
+        this.selection.cancelFloating();
     }
 
     async updateCopyBlob() {

@@ -2,6 +2,7 @@
 import { expect, test, describe, beforeAll, beforeEach, vi } from 'vitest'
 import ImageController from '../image_controller.js'
 import ImageModel from '../image_model.js'
+import Selection from '../selection.js'
 import { mountFixture } from './dom_helpers.js'
 import { create_solid_png_buffer } from './test_helpers.js'
 
@@ -93,7 +94,7 @@ describe('getFloatingRenderInfo', () => {
 
   test('returns bounds, shape, and a fresh preview bitmap when a floating layer is active', async () => {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'ellipse', x: 10, y: 20, w: 30, h: 40 };
+    model.selection = new Selection({ type: 'ellipse', x: 10, y: 20, w: 30, h: 40 });
     await model.pasteIntoSelection(await create_solid_png_buffer(30, 40, BLACK));
 
     const info = controller.getFloatingRenderInfo();
@@ -127,7 +128,7 @@ describe('handlePaste', () => {
 
   test('calls model.pasteIntoSelection when a selection is active, then re-renders', async () => {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { x: 0, y: 0, w: 50, h: 50 };
+    model.selection = new Selection({ x: 0, y: 0, w: 50, h: 50 });
     const pasteSpy = vi.spyOn(model, 'pasteIntoSelection');
     const buffer = await create_solid_png_buffer(50, 50, BLACK);
 
@@ -139,7 +140,7 @@ describe('handlePaste', () => {
 
   test('re-pasting while a floating layer is active commits the old one first, then floats the new image', async () => {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'rect', x: 10, y: 10, w: 20, h: 20 };
+    model.selection = new Selection({ type: 'rect', x: 10, y: 10, w: 20, h: 20 });
     await model.pasteIntoSelection(await create_solid_png_buffer(20, 20, BLACK));
 
     const newBuffer = await create_solid_png_buffer(20, 20, { r: 0, g: 255, b: 0 });
@@ -150,14 +151,14 @@ describe('handlePaste', () => {
     expect(model.mainImage.pixel_color(15, 15)).toStrictEqual(BLACK);
     // a fresh floating layer holds the newly pasted image, at the (unchanged) selection bounds
     expect(model.hasFloatingLayer()).toBe(true);
-    expect(model.floatingLayer).toMatchObject({ x: 10, y: 10, w: 20, h: 20 });
-    expect(model.floatingLayer.original.pixel_color(0, 0)).toStrictEqual({ r: 0, g: 255, b: 0 });
+    expect(model.selection).toMatchObject({ x: 10, y: 10, w: 20, h: 20 });
+    expect(model.selection.original.pixel_color(0, 0)).toStrictEqual({ r: 0, g: 255, b: 0 });
     expect(model.history).toHaveLength(2); // createNew + the auto-commit; the new paste isn't committed yet
   });
 
   test('pasting when no floating layer is active behaves exactly as a first-time paste', async () => {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'rect', x: 0, y: 0, w: 50, h: 50 };
+    model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 50, h: 50 });
     const commitSpy = vi.spyOn(model, 'commitFloatingLayer');
     const buffer = await create_solid_png_buffer(50, 50, BLACK);
 
@@ -189,7 +190,7 @@ describe('handleCopy', () => {
 
   test('commits the floating layer first, then copies the now-updated canvas region', async () => {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+    model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
     await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
 
     const event = dispatchCopy();
@@ -252,7 +253,7 @@ describe('handleKeyDown', () => {
     async function setupFloatingLayer() {
       await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
       await model.createNew(await create_solid_png_buffer(110, 100, WHITE));
-      model.selection = { type: 'rect', x: 0, y: 0, w: 50, h: 50 };
+      model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 50, h: 50 });
       await model.pasteIntoSelection(await create_solid_png_buffer(50, 50, BLACK));
     }
 
@@ -307,7 +308,7 @@ describe('handleKeyDown', () => {
 
     dispatchKey('a', { ctrlKey: true });
 
-    expect(model.selection).toStrictEqual({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
+    expect(model.selection).toMatchObject({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
     expect(updateCopyBlobSpy).toHaveBeenCalled();
     expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
   });
@@ -325,13 +326,13 @@ describe('handleKeyDown', () => {
 
     dispatchKey('a', { ctrlKey: true });
 
-    expect(model.selection).toStrictEqual({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
+    expect(model.selection).toMatchObject({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
     expect(model.shapeMode).toBe('ellipse'); // Select All neither reads nor writes shape mode
   });
 
   test('Enter commits the floating layer', async () => {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+    model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
     await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
 
     dispatchKey('Enter');
@@ -352,7 +353,7 @@ describe('handleKeyDown', () => {
 
   test('Escape clears isSelecting and selection', () => {
     controller.isSelecting = true;
-    model.selection = { x: 0, y: 0, w: 10, h: 10 };
+    model.selection = new Selection({ x: 0, y: 0, w: 10, h: 10 });
 
     dispatchKey('Escape');
 
@@ -363,7 +364,7 @@ describe('handleKeyDown', () => {
 
   test('Escape cancels the floating layer instead of deselecting, with no history entry', async () => {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+    model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
     await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
     const historyLengthBefore = model.history.length;
 
@@ -372,13 +373,13 @@ describe('handleKeyDown', () => {
     expect(model.hasFloatingLayer()).toBe(false);
     expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE); // canvas reverted, nothing was ever baked in
     expect(model.history).toHaveLength(historyLengthBefore);
-    expect(model.selection).toStrictEqual({ type: 'rect', x: 50, y: 50, w: 100, h: 100 }); // the pre-paste selection survives
+    expect(model.selection).toMatchObject({ type: 'rect', x: 50, y: 50, w: 100, h: 100 }); // the pre-paste selection survives
     expect(fakeView.render).toHaveBeenCalled();
   });
 
   test('r/h/v trigger manipulateSelection with the right direction when a selection exists', async () => {
     await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-    model.selection = { x: 0, y: 0, w: 100, h: 100 };
+    model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
     const manipulateSpy = vi.spyOn(model, 'manipulateSelection');
 
     dispatchKey('r');
@@ -393,20 +394,20 @@ describe('handleKeyDown', () => {
     expect(fakeView.render).toHaveBeenCalled();
   });
 
-  test('r/h/v update the floating layer transform, not mainImage, when a floating layer is active', async () => {
+  test('r/h/v update the floating selection transform, not mainImage, when a floating layer is active', async () => {
     await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-    model.selection = { type: 'rect', x: 0, y: 0, w: 40, h: 40 };
+    model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
     await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
 
     dispatchKey('r');
 
-    expect(model.floatingLayer.rotation).toBe(90);
+    expect(model.selection.rotation).toBe(90);
     expect(model.mainImage.pixel_color(10, 10)).toStrictEqual(WHITE);
   });
 
   test('shift+r maps to rotateCCW', async () => {
     await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-    model.selection = { x: 0, y: 0, w: 100, h: 100 };
+    model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
     const manipulateSpy = vi.spyOn(model, 'manipulateSelection');
 
     dispatchKey('r', { shiftKey: true });
@@ -481,7 +482,7 @@ describe('handleKeyDown', () => {
   describe('arrow-key nudge', () => {
     async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
       await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-      model.selection = { type: 'rect', x, y, w, h };
+      model.selection = new Selection({ type: 'rect', x, y, w, h });
       await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
     }
 
@@ -491,7 +492,7 @@ describe('handleKeyDown', () => {
       dispatchKey('ArrowRight');
       dispatchKey('ArrowDown');
 
-      expect(model.floatingLayer).toMatchObject({ x: 21, y: 21 });
+      expect(model.selection).toMatchObject({ x: 21, y: 21 });
       expect(fakeView.render).toHaveBeenCalled();
     });
 
@@ -501,7 +502,7 @@ describe('handleKeyDown', () => {
       dispatchKey('ArrowLeft', { shiftKey: true });
       dispatchKey('ArrowUp', { shiftKey: true });
 
-      expect(model.floatingLayer).toMatchObject({ x: 10, y: 10 });
+      expect(model.selection).toMatchObject({ x: 10, y: 10 });
     });
 
     test('arrow keys do nothing without a floating layer', async () => {
@@ -526,7 +527,7 @@ describe('shape-toggle-btn', () => {
 
   test('clicking after a selection is finalized switches its shape and refreshes the copy blob', async () => {
     await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-    model.selection = { type: 'rect', x: 0, y: 0, w: 10, h: 10 };
+    model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 10, h: 10 });
     const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
 
     document.getElementById('shape-toggle-btn').dispatchEvent(new Event('click', { bubbles: true }));
@@ -588,6 +589,15 @@ describe('handleMouseDown', () => {
     expect(model.alphaKey).toBeNull();
     expect(fakeView.setAlphaColor).toHaveBeenCalledWith(null);
   });
+
+  test('alt+click still samples color even when a marquee selection already exists', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE, BLACK));
+    model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 50, h: 50 });
+
+    dispatchMouseDown({ clientX: 0, clientY: 0, altKey: true });
+
+    expect(model.alphaKey).toStrictEqual(BLACK);
+  });
 });
 
 describe('handleMouseMove', () => {
@@ -608,7 +618,7 @@ describe('handleMouseMove', () => {
 
     dispatchMouseMove({ clientX: 20, clientY: 30 });
 
-    expect(model.selection).toStrictEqual({ type: 'rect', x: 20, y: 30, w: 30, h: 20 });
+    expect(model.selection).toMatchObject({ type: 'rect', x: 20, y: 30, w: 30, h: 20 });
     expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
   });
 });
@@ -620,7 +630,7 @@ describe('handleMouseUp', () => {
 
   test('collapses a zero-width/height drag back to selection = null', async () => {
     controller.isSelecting = true;
-    model.selection = { x: 10, y: 10, w: 0, h: 5 };
+    model.selection = new Selection({ x: 10, y: 10, w: 0, h: 5 });
 
     dispatchMouseUp();
 
@@ -630,12 +640,81 @@ describe('handleMouseUp', () => {
   test('calls model.updateCopyBlob when a non-empty selection resulted', async () => {
     await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
     controller.isSelecting = true;
-    model.selection = { x: 0, y: 0, w: 10, h: 10 };
+    model.selection = new Selection({ x: 0, y: 0, w: 10, h: 10 });
     const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
 
     dispatchMouseUp();
 
     await vi.waitFor(() => expect(updateCopyBlobSpy).toHaveBeenCalled());
+  });
+});
+
+describe('marquee selection move & resize (new: handles now exist before any paste)', () => {
+  function dispatchMouseDown(opts = {}) {
+    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
+  }
+  function dispatchMouseMove(opts = {}) {
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, ...opts }));
+  }
+  function dispatchMouseUp() {
+    window.dispatchEvent(new Event('mouseup'));
+  }
+
+  async function setupMarqueeSelection(x = 20, y = 20, w = 40, h = 40) {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = new Selection({ type: 'rect', x, y, w, h });
+  }
+
+  test('mousedown on a handle begins a resize gesture, without altering pixels', async () => {
+    await setupMarqueeSelection(); // box: x20 y20 w40 h40 -> se handle at (60,60)
+    const beginResizeSpy = vi.spyOn(model.selection, 'beginResize');
+
+    dispatchMouseDown({ clientX: 60, clientY: 60 });
+
+    expect(beginResizeSpy).toHaveBeenCalledWith('se');
+    expect(controller.selectionDrag).toBeTruthy();
+    expect(model.hasFloatingLayer()).toBe(false);
+  });
+
+  test('mousedown inside the box (not on a handle) begins a move gesture', async () => {
+    await setupMarqueeSelection();
+    const beginMoveSpy = vi.spyOn(model.selection, 'beginMove');
+
+    dispatchMouseDown({ clientX: 40, clientY: 40 }); // center, well clear of any handle
+
+    expect(beginMoveSpy).toHaveBeenCalledWith({ x: 40, y: 40 });
+    expect(controller.selectionDrag).toBeTruthy();
+  });
+
+  test('dragging a handle resizes the marquee selection directly, never touching mainImage', async () => {
+    await setupMarqueeSelection();
+    dispatchMouseDown({ clientX: 60, clientY: 60 }); // se handle
+
+    dispatchMouseMove({ clientX: 80, clientY: 70 });
+
+    expect(model.selection).toMatchObject({ x: 20, y: 20, w: 60, h: 50 });
+    expect(model.mainImage.pixel_color(0, 0)).toStrictEqual(WHITE);
+  });
+
+  test('mouseup ends the drag', async () => {
+    await setupMarqueeSelection();
+    dispatchMouseDown({ clientX: 40, clientY: 40 });
+    const endDragSpy = vi.spyOn(model.selection, 'endDrag');
+
+    dispatchMouseUp();
+
+    expect(endDragSpy).toHaveBeenCalled();
+    expect(controller.selectionDrag).toBeNull();
+  });
+
+  test('mousedown outside the box discards it and starts a normal selection drag from there', async () => {
+    await setupMarqueeSelection();
+
+    dispatchMouseDown({ clientX: 150, clientY: 150 });
+
+    await vi.waitFor(() => expect(controller.isSelecting).toBe(true));
+    expect(controller.selectionDrag).toBeNull();
+    expect(controller.startPos).toStrictEqual({ x: 150, y: 150 });
   });
 });
 
@@ -652,38 +731,38 @@ describe('floating layer move & resize (routing)', () => {
 
   async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'rect', x, y, w, h };
+    model.selection = new Selection({ type: 'rect', x, y, w, h });
     await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
   }
 
   // The exact resize/flip-through/aspect-lock geometry is covered directly against
-  // FloatingLayer in floating_layer.test.js; these assert the controller wires mouse
-  // events to the right model.* delegator, not the resulting numbers.
+  // Selection in selection.test.js; these assert the controller wires mouse events to
+  // the right model.selection.* method, not the resulting numbers.
 
   test('mousedown on a handle begins a resize gesture on the model', async () => {
     await setupFloatingLayer(); // box: x20 y20 w40 h40 -> se handle at (60,60)
-    const beginResizeSpy = vi.spyOn(model.floatingLayer, 'beginResize');
+    const beginResizeSpy = vi.spyOn(model.selection, 'beginResize');
 
     dispatchMouseDown({ clientX: 60, clientY: 60 });
 
     expect(beginResizeSpy).toHaveBeenCalledWith('se');
-    expect(controller.floatingDrag).toBeTruthy();
+    expect(controller.selectionDrag).toBeTruthy();
   });
 
   test('mousedown inside the box (not on a handle) begins a move gesture on the model', async () => {
     await setupFloatingLayer();
-    const beginMoveSpy = vi.spyOn(model.floatingLayer, 'beginMove');
+    const beginMoveSpy = vi.spyOn(model.selection, 'beginMove');
 
     dispatchMouseDown({ clientX: 40, clientY: 40 }); // center, well clear of any handle
 
     expect(beginMoveSpy).toHaveBeenCalledWith({ x: 40, y: 40 });
-    expect(controller.floatingDrag).toBeTruthy();
+    expect(controller.selectionDrag).toBeTruthy();
   });
 
-  test('mousemove while dragging forwards coords and shiftKey to model.applyFloatingDrag', async () => {
+  test('mousemove while dragging forwards coords and shiftKey to model.selection.applyDrag', async () => {
     await setupFloatingLayer();
     dispatchMouseDown({ clientX: 40, clientY: 40 });
-    const applyDragSpy = vi.spyOn(model.floatingLayer, 'applyDrag');
+    const applyDragSpy = vi.spyOn(model.selection, 'applyDrag');
 
     dispatchMouseMove({ clientX: 50, clientY: 55, shiftKey: true });
 
@@ -694,12 +773,12 @@ describe('floating layer move & resize (routing)', () => {
   test('mouseup ends the drag', async () => {
     await setupFloatingLayer();
     dispatchMouseDown({ clientX: 40, clientY: 40 });
-    const endDragSpy = vi.spyOn(model.floatingLayer, 'endDrag');
+    const endDragSpy = vi.spyOn(model.selection, 'endDrag');
 
     dispatchMouseUp();
 
     expect(endDragSpy).toHaveBeenCalled();
-    expect(controller.floatingDrag).toBeNull();
+    expect(controller.selectionDrag).toBeNull();
   });
 
   test('mousedown outside the box commits the floating layer, then starts a normal selection drag from there', async () => {
@@ -713,7 +792,7 @@ describe('floating layer move & resize (routing)', () => {
     await vi.waitFor(() => expect(controller.isSelecting).toBe(true));
     expect(model.hasFloatingLayer()).toBe(false);
     expect(model.mainImage.pixel_color(30, 30)).toStrictEqual(BLACK); // committed at its original bounds
-    expect(controller.floatingDrag).toBeNull();
+    expect(controller.selectionDrag).toBeNull();
     expect(controller.startPos).toStrictEqual({ x: 150, y: 150 });
   });
 
@@ -724,14 +803,14 @@ describe('floating layer move & resize (routing)', () => {
     await vi.waitFor(() => expect(controller.isSelecting).toBe(true));
     dispatchMouseMove({ clientX: 170, clientY: 180 });
 
-    expect(model.selection).toStrictEqual({ type: 'rect', x: 150, y: 150, w: 20, h: 30 });
+    expect(model.selection).toMatchObject({ type: 'rect', x: 150, y: 150, w: 20, h: 30 });
   });
 });
 
 describe('floating layer commit triggers', () => {
   async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'rect', x, y, w, h };
+    model.selection = new Selection({ type: 'rect', x, y, w, h });
     await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
   }
 
@@ -750,7 +829,7 @@ describe('floating layer commit triggers', () => {
 describe('toolbar clicks while a floating layer is active', () => {
   async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = { type: 'rect', x, y, w, h };
+    model.selection = new Selection({ type: 'rect', x, y, w, h });
     await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
   }
 
@@ -761,7 +840,7 @@ describe('toolbar clicks while a floating layer is active', () => {
   // (e.g. rotate) ever ran.
   test('a real mousedown+mouseup+click on a toolbar button rotates the floating layer in place instead of committing it', async () => {
     await setupFloatingLayer();
-    const rotateSpy = vi.spyOn(model.floatingLayer, 'rotate');
+    const rotateSpy = vi.spyOn(model.selection, 'rotate');
     const btn = document.getElementById('rotate-btn');
 
     btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -781,7 +860,7 @@ describe('handleManipulate / toolbar button wiring', () => {
     ['rotate-btn', 'rotateCW'],
   ])('%s calls manipulateSelection with %s and re-renders', async (id, direction) => {
     await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-    model.selection = { x: 0, y: 0, w: 100, h: 100 };
+    model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
     const manipulateSpy = vi.spyOn(model, 'manipulateSelection');
 
     document.getElementById(id).dispatchEvent(new Event('click', { bubbles: true }));

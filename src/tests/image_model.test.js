@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import ImageModel, { toleranceToDistance } from '../image_model.js'
+import Selection from '../selection.js'
 import { CreateBitmap } from '../bitmap.js'
 import { create_solid_png_buffer } from './test_helpers.js'
 
@@ -34,7 +35,7 @@ test('createNew loads a bitmap, clears selection, and records history', async ()
 test('clear resets to an empty bitmap and records history', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(120, 100, WHITE));
-  model.selection = { x: 0, y: 0, w: 5, h: 5 };
+  model.selection = new Selection({ x: 0, y: 0, w: 5, h: 5 });
 
   await model.clear();
 
@@ -95,13 +96,13 @@ test('history is capped at 6 entries, dropping the oldest', async () => {
 
 test('pasteIntoSelection is a no-op on an empty model', async () => {
   const model = new ImageModel();
-  model.selection = { x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
 
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
 
   expect(model.isEmpty()).toBeTruthy();
   expect(model.pendingCopyBlob).toBeNull();
-  expect(model.floatingLayer).toBeNull();
+  expect(model.hasFloatingLayer()).toBe(false);
 });
 
 test('pasteIntoSelection is a no-op without an active selection', async () => {
@@ -112,75 +113,75 @@ test('pasteIntoSelection is a no-op without an active selection', async () => {
 
   expect(model.mainImage.pixel_color(0, 0)).toStrictEqual(WHITE);
   expect(model.pendingCopyBlob).toBeNull();
-  expect(model.floatingLayer).toBeNull();
+  expect(model.hasFloatingLayer()).toBe(false);
 });
 
-test('pasteIntoSelection creates a floating layer sized to the selection, without touching mainImage or history', async () => {
+test('pasteIntoSelection turns the selection floating, sized to its own bounds, without touching mainImage or history', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
   const historyLengthBefore = model.history.length;
 
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
 
   expect(model.hasFloatingLayer()).toBe(true);
-  expect(model.floatingLayer).toMatchObject({ x: 50, y: 50, w: 100, h: 100, rotation: 0, flipH: false, flipV: false });
-  expect(model.floatingLayer.original.width).toBe(100);
-  expect(model.floatingLayer.original.height).toBe(100);
+  expect(model.selection).toMatchObject({ x: 50, y: 50, w: 100, h: 100, rotation: 0, flipH: false, flipV: false });
+  expect(model.selection.original.width).toBe(100);
+  expect(model.selection.original.height).toBe(100);
   expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
   expect(model.mainImage.pixel_color(149, 149)).toStrictEqual(WHITE);
   expect(model.history).toHaveLength(historyLengthBefore);
 });
 
-test('pasteIntoSelection with an ellipse selection creates a floating layer sized to the bounds', async () => {
+test('pasteIntoSelection with an ellipse selection turns it floating, sized to the bounds', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'ellipse', x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'ellipse', x: 0, y: 0, w: 100, h: 100 });
 
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
 
-  expect(model.floatingLayer).toMatchObject({ x: 0, y: 0, w: 100, h: 100 });
+  expect(model.selection).toMatchObject({ x: 0, y: 0, w: 100, h: 100 });
   // ellipse masking is applied at render/commit time, not at paste time
   expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
 });
 
-test('pasteIntoSelection strips pixels matching the alpha key from the floating layer bitmap', async () => {
+test('pasteIntoSelection strips pixels matching the alpha key from the floating bitmap', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { x: 50, y: 50, w: 100, h: 100 };
+  model.selection = new Selection({ x: 50, y: 50, w: 100, h: 100 });
   model.alphaKey = BLACK;
 
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK)); // matches alpha key
 
   // the whole pasted patch matched the alpha key, so it's transparent before it ever floats
-  const data = model.floatingLayer.original.data();
+  const data = model.selection.original.data();
   expect(data[3]).toBe(0);
 });
 
 test('pasteIntoSelection strips near-matching pixels when colorTolerance allows it', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { x: 50, y: 50, w: 10, h: 10 };
+  model.selection = new Selection({ x: 50, y: 50, w: 10, h: 10 });
   model.alphaKey = BLACK;
   model.colorTolerance = 100; // widest possible tolerance
 
   await model.pasteIntoSelection(await create_solid_png_buffer(10, 10, { r: 50, g: 50, b: 50 })); // close to black, not exact
 
-  const data = model.floatingLayer.original.data();
+  const data = model.selection.original.data();
   expect(data[3]).toBe(0); // stripped to transparent
 });
 
 test('pasteIntoSelection with colorTolerance 0 keeps today\'s exact-match-only behavior', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { x: 50, y: 50, w: 10, h: 10 };
+  model.selection = new Selection({ x: 50, y: 50, w: 10, h: 10 });
   model.alphaKey = BLACK;
   model.colorTolerance = 0;
 
   await model.pasteIntoSelection(await create_solid_png_buffer(10, 10, { r: 50, g: 50, b: 50 })); // close to black, not exact
 
-  expect(model.floatingLayer.original.pixel_color(0, 0)).toStrictEqual({ r: 50, g: 50, b: 50 }); // not stripped
-  const data = model.floatingLayer.original.data();
+  expect(model.selection.original.pixel_color(0, 0)).toStrictEqual({ r: 50, g: 50, b: 50 }); // not stripped
+  const data = model.selection.original.data();
   expect(data[3]).toBe(255); // still opaque
 });
 
@@ -191,7 +192,7 @@ test('toleranceToDistance maps the 0-100 slider onto the max RGB distance', () =
 
 test('manipulateSelection is a no-op on an empty model', async () => {
   const model = new ImageModel();
-  model.selection = { x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
 
   await model.manipulateSelection('flipH');
 
@@ -210,7 +211,7 @@ test('manipulateSelection is a no-op without an active selection', async () => {
 test('manipulateSelection flipH flips the selected region in place', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(300, 200, WHITE, BLACK)); // black top-left corner
-  model.selection = { x: 0, y: 0, w: 300, h: 200 };
+  model.selection = new Selection({ x: 0, y: 0, w: 300, h: 200 });
 
   await model.manipulateSelection('flipH');
 
@@ -226,7 +227,7 @@ test('manipulateSelection flipH on an ellipse selection only affects pixels insi
   // left half black, right half white
   model.mainImage.composite(await CreateBitmap(await create_solid_png_buffer(50, 100, BLACK)), 0, 0);
 
-  model.selection = { type: 'ellipse', x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'ellipse', x: 0, y: 0, w: 100, h: 100 });
   await model.manipulateSelection('flipH');
 
   expect(model.mainImage.pixel_color(10, 50)).toStrictEqual(WHITE); // interior pixel, flipped from black to white
@@ -236,7 +237,7 @@ test('manipulateSelection flipH on an ellipse selection only affects pixels insi
 test('manipulateSelection rotateCW rotates the selected region and keeps its footprint', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE, BLACK)); // black top-left corner, square
-  model.selection = { x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
 
   await model.manipulateSelection('rotateCW');
 
@@ -252,7 +253,7 @@ test('manipulateSelection rotateCW resizes a non-square selection back to its or
   // left half black, right half white
   model.mainImage.composite(await CreateBitmap(await create_solid_png_buffer(100, 100, BLACK)), 0, 0);
 
-  model.selection = { x: 0, y: 0, w: 200, h: 100 }; // non-square: the whole canvas
+  model.selection = new Selection({ x: 0, y: 0, w: 200, h: 100 }); // non-square: the whole canvas
   await model.manipulateSelection('rotateCW');
 
   expect(model.mainImage.width).toBe(200);
@@ -262,54 +263,65 @@ test('manipulateSelection rotateCW resizes a non-square selection back to its or
   expect(model.mainImage.pixel_color(50, 90)).toStrictEqual(WHITE);
 });
 
-test('manipulateSelection updates the floating layer transform instead of mainImage when a floating layer is active', async () => {
+test('manipulateSelection returns to marquee (no original) after baking a one-shot transform', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(100, 100, WHITE, BLACK));
+  model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
+
+  await model.manipulateSelection('rotateCW');
+
+  expect(model.hasFloatingLayer()).toBe(false);
+  expect(model.selection.original).toBeNull();
+});
+
+test('manipulateSelection updates the floating selection transform instead of mainImage when floating', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'rect', x: 0, y: 0, w: 40, h: 40 };
+  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
   await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
   const historyLengthBefore = model.history.length;
 
   await model.manipulateSelection('rotateCW');
-  expect(model.floatingLayer.rotation).toBe(90);
+  expect(model.selection.rotation).toBe(90);
 
   await model.manipulateSelection('rotateCCW');
-  expect(model.floatingLayer.rotation).toBe(0);
+  expect(model.selection.rotation).toBe(0);
 
   await model.manipulateSelection('flipH');
-  expect(model.floatingLayer.flipH).toBe(true);
+  expect(model.selection.flipH).toBe(true);
 
   await model.manipulateSelection('flipV');
-  expect(model.floatingLayer.flipV).toBe(true);
+  expect(model.selection.flipV).toBe(true);
 
   // mainImage and history are untouched - nothing is committed yet
   expect(model.mainImage.pixel_color(10, 10)).toStrictEqual(WHITE);
   expect(model.history).toHaveLength(historyLengthBefore);
 });
 
-test('manipulateSelection rotating a floating layer 4 times returns to the original preview pixel-for-pixel', async () => {
+test('manipulateSelection rotating a floating selection 4 times returns to the original preview pixel-for-pixel', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'rect', x: 0, y: 0, w: 40, h: 40 };
+  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
   await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
   const before = Array.from(model.getFloatingLayerPreview().data());
 
   for (let i = 0; i < 4; i++) await model.manipulateSelection('rotateCW');
 
-  expect(model.floatingLayer.rotation).toBe(0);
+  expect(model.selection.rotation).toBe(0);
   expect(Array.from(model.getFloatingLayerPreview().data())).toStrictEqual(before);
 });
 
-test('manipulateSelection flipping a floating layer twice returns to the original preview pixel-for-pixel', async () => {
+test('manipulateSelection flipping a floating selection twice returns to the original preview pixel-for-pixel', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'rect', x: 0, y: 0, w: 40, h: 40 };
+  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
   await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
   const before = Array.from(model.getFloatingLayerPreview().data());
 
   await model.manipulateSelection('flipH');
   await model.manipulateSelection('flipH');
 
-  expect(model.floatingLayer.flipH).toBe(false);
+  expect(model.selection.flipH).toBe(false);
   expect(Array.from(model.getFloatingLayerPreview().data())).toStrictEqual(before);
 });
 
@@ -323,10 +335,10 @@ test('commitFloatingLayer is a no-op when there is no floating layer', async () 
   expect(model.history).toHaveLength(historyLengthBefore);
 });
 
-test('commitFloatingLayer bakes the transformed floating layer into mainImage, records one history entry, and clears the floating layer', async () => {
+test('commitFloatingLayer bakes the transformed floating selection into mainImage, records one history entry, and returns to marquee', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
   const historyLengthBefore = model.history.length;
 
@@ -342,7 +354,7 @@ test('commitFloatingLayer bakes the transformed floating layer into mainImage, r
 test('commitFloatingLayer applies the ellipse mask before compositing', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'ellipse', x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'ellipse', x: 0, y: 0, w: 100, h: 100 });
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
 
   await model.commitFloatingLayer();
@@ -351,27 +363,29 @@ test('commitFloatingLayer applies the ellipse mask before compositing', async ()
   expect(model.mainImage.pixel_color(0, 0)).toStrictEqual(WHITE); // corner, outside the ellipse
 });
 
-test('commitFloatingLayer updates selection to the floating layer\'s final (possibly moved/resized) bounds', async () => {
+test('commitFloatingLayer leaves the selection at its final (possibly moved/resized) bounds', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
-  model.floatingLayer.x = 10;
-  model.floatingLayer.y = 10;
-  model.floatingLayer.w = 30;
-  model.floatingLayer.h = 30;
+  model.selection.x = 10;
+  model.selection.y = 10;
+  model.selection.w = 30;
+  model.selection.h = 30;
 
   await model.commitFloatingLayer();
 
-  expect(model.selection).toStrictEqual({ type: 'rect', x: 10, y: 10, w: 30, h: 30 });
+  expect(model.selection.bounds()).toStrictEqual({ x: 10, y: 10, w: 30, h: 30 });
+  expect(model.selection.type).toBe('rect');
+  expect(model.hasFloatingLayer()).toBe(false);
 });
 
 test('commitFloatingLayer bakes rotate/flip transforms applied while floating', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'rect', x: 0, y: 0, w: 50, h: 100 };
+  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 50, h: 100 });
   await model.pasteIntoSelection(await create_solid_png_buffer(50, 100, BLACK, { r: 0, g: 255, b: 0 })); // green top-left corner
-  await model.manipulateSelection('flipH'); // floating layer active -> non-destructive
+  await model.manipulateSelection('flipH'); // floating -> non-destructive
 
   await model.commitFloatingLayer();
 
@@ -382,7 +396,7 @@ test('commitFloatingLayer bakes rotate/flip transforms applied while floating', 
 test('undo after a commit removes the composited content and restores the prior canvas state', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
   await model.commitFloatingLayer();
   expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(BLACK);
@@ -392,18 +406,27 @@ test('undo after a commit removes the composited content and restores the prior 
   expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
 });
 
-test('cancelFloatingLayer clears the floating layer without touching mainImage or history', async () => {
+test('cancelFloatingLayer restores the pre-paste selection without touching mainImage or history', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
   const historyBefore = [...model.history];
 
   model.cancelFloatingLayer();
 
   expect(model.hasFloatingLayer()).toBe(false);
+  expect(model.selection.bounds()).toStrictEqual({ x: 50, y: 50, w: 100, h: 100 });
   expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
   expect(model.history).toStrictEqual(historyBefore);
+});
+
+test('cancelFloatingLayer is a no-op without a floating layer', () => {
+  const model = new ImageModel();
+  const cancelSpy = () => model.cancelFloatingLayer();
+
+  expect(cancelSpy).not.toThrow();
+  expect(model.selection).toBeNull();
 });
 
 test('getFloatingLayerPreview returns null when there is no floating layer', () => {
@@ -414,23 +437,23 @@ test('getFloatingLayerPreview returns null when there is no floating layer', () 
 test('getFloatingLayerPreview resizes to the current w/h without mutating the original bitmap', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = { type: 'rect', x: 0, y: 0, w: 50, h: 50 };
+  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 50, h: 50 });
   await model.pasteIntoSelection(await create_solid_png_buffer(50, 50, BLACK));
-  model.floatingLayer.w = 20;
-  model.floatingLayer.h = 10;
+  model.selection.w = 20;
+  model.selection.h = 10;
 
   const preview = model.getFloatingLayerPreview();
 
   expect(preview.width).toBe(20);
   expect(preview.height).toBe(10);
-  expect(model.floatingLayer.original.width).toBe(50); // untouched
-  expect(model.floatingLayer.original.height).toBe(50);
+  expect(model.selection.original.width).toBe(50); // untouched
+  expect(model.selection.original.height).toBe(50);
 });
 
 test('getFloatingLayerPreview masks to an ellipse when the selection shape is ellipse', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'ellipse', x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'ellipse', x: 0, y: 0, w: 100, h: 100 });
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
 
   const preview = model.getFloatingLayerPreview();
@@ -444,9 +467,9 @@ test('getFloatingLayerPreview masks to an ellipse when the selection shape is el
 test('getFloatingLayerPreview repeated calls with the same rotation produce identical results (no cumulative loss)', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'rect', x: 0, y: 0, w: 40, h: 40 };
+  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
   await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
-  model.floatingLayer.rotation = 90;
+  model.selection.rotation = 90;
 
   const first = model.getFloatingLayerPreview();
   const second = model.getFloatingLayerPreview();
@@ -456,7 +479,7 @@ test('getFloatingLayerPreview repeated calls with the same rotation produce iden
 
 test('updateCopyBlob is a no-op on an empty model', async () => {
   const model = new ImageModel();
-  model.selection = { x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
 
   await model.updateCopyBlob();
 
@@ -475,7 +498,7 @@ test('updateCopyBlob is a no-op without an active selection', async () => {
 test('updateCopyBlob captures the selection as a PNG blob', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { x: 0, y: 0, w: 50, h: 50 };
+  model.selection = new Selection({ x: 0, y: 0, w: 50, h: 50 });
 
   await model.updateCopyBlob();
 
@@ -487,7 +510,7 @@ test('updateCopyBlob captures the selection as a PNG blob', async () => {
 test('updateCopyBlob on an ellipse selection makes bounding-box corners transparent', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = { type: 'ellipse', x: 0, y: 0, w: 100, h: 100 };
+  model.selection = new Selection({ type: 'ellipse', x: 0, y: 0, w: 100, h: 100 });
 
   await model.updateCopyBlob();
 

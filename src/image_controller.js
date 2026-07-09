@@ -1,3 +1,5 @@
+import Selection from './selection.js'
+
 /**
  * CONTROLLER: Orchestrates View and Model
  */
@@ -7,7 +9,7 @@ export default class ImageController {
         this.view = view;
         this.isSelecting = false;
         this.startPos = { x: 0, y: 0 };
-        this.floatingDrag = null; // truthy while dragging a floating layer's move/resize gesture
+        this.selectionDrag = null; // truthy while dragging a selection's move/resize gesture
         this.toolbar = document.getElementById('toolbar');
 
         this.initListeners();
@@ -20,10 +22,10 @@ export default class ImageController {
 
     getFloatingRenderInfo() {
         if (!this.model.hasFloatingLayer()) return null;
-        const { x, y, w, h } = this.model.floatingBounds();
+        const { x, y, w, h } = this.model.selection.bounds();
         return {
             x, y, w, h,
-            shape: this.model.floatingShape(),
+            shape: this.model.selection.type,
             bitmap: this.model.getFloatingLayerPreview(),
         };
     }
@@ -125,7 +127,7 @@ export default class ImageController {
         else if (ctrl && key === 'a') {
             e.preventDefault();
             if (this.model.notEmpty()) {
-                this.model.selection = { type: 'rect', x: 0, y: 0, w: this.model.mainImage.width, h: this.model.mainImage.height };
+                this.model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: this.model.mainImage.width, h: this.model.mainImage.height });
                 this.model.updateCopyBlob();
                 this.view.drawSelection(this.model.selection);
             }
@@ -163,7 +165,7 @@ export default class ImageController {
             e.preventDefault();
             const step = shift ? 10 : 1;
             const dir = key.slice('arrow'.length); // 'arrowup' -> 'up'
-            this.model.nudgeFloating(dir, step);
+            this.model.selection.nudge(dir, step);
             this.render_view();
         }
         else if (this.model.selection) {
@@ -201,7 +203,7 @@ export default class ImageController {
         }
         this.model.shapeMode = this.model.shapeMode === 'ellipse' ? 'rect' : 'ellipse';
         if (this.model.selection) {
-            this.model.selection = { ...this.model.selection, type: this.model.shapeMode };
+            this.model.selection.type = this.model.shapeMode;
             this.view.drawSelection(this.model.selection);
             if (!this.isSelecting) {
                 await this.model.updateCopyBlob();
@@ -227,11 +229,15 @@ export default class ImageController {
         if(this.model.isEmpty()) return;
 
         if (this.model.hasFloatingLayer()) {
-            await this.handleFloatingMouseDown(e);
+            await this.handleSelectionMouseDown(e);
             return;
         }
 
         if (!e.altKey){
+            if (this.model.selection) {
+                await this.handleSelectionMouseDown(e);
+                return;
+            }
             this.isSelecting = true;
             this.startPos = this.getCanvasCoords(e);
             return;
@@ -246,29 +252,32 @@ export default class ImageController {
         this.view.setAlphaColor(this.model.alphaKey);
     }
 
-    async handleFloatingMouseDown(e) {
+    // Routes a mousedown against an existing selection (marquee or floating) to a
+    // resize/move gesture, or - if it misses the selection entirely - commits it (a
+    // no-op for marquee, nothing to commit) and starts a fresh selection drag from here.
+    async handleSelectionMouseDown(e) {
         const coords = this.getCanvasCoords(e);
-        const handle = this.view.hitTestHandle(this.model.floatingBounds(), coords);
+        const sel = this.model.selection;
+        const handle = this.view.hitTestHandle(sel.bounds(), coords);
         if (handle) {
-            this.model.beginFloatingResize(handle);
-            this.floatingDrag = true;
+            sel.beginResize(handle);
+            this.selectionDrag = true;
             return;
         }
-        if (this.model.floatingContains(coords)) {
-            this.model.beginFloatingMove(coords);
-            this.floatingDrag = true;
+        if (sel.contains(coords)) {
+            sel.beginMove(coords);
+            this.selectionDrag = true;
             return;
         }
-        // Outside the floating box: commit it, then start a normal selection drag from here.
         await this.commitFloating();
         this.isSelecting = true;
         this.startPos = coords;
     }
 
     handleMouseMove(e) {
-        if (this.floatingDrag) {
+        if (this.selectionDrag) {
             const coords = this.getCanvasCoords(e);
-            this.model.applyFloatingDrag(coords, e.shiftKey);
+            this.model.selection.applyDrag(coords, e.shiftKey);
             this.render_view();
             return;
         }
@@ -276,20 +285,20 @@ export default class ImageController {
         if (!this.isSelecting) return;
 
         const current = this.getCanvasCoords(e);
-        this.model.selection = {
+        this.model.selection = new Selection({
             type: this.model.shapeMode,
             x: Math.min(this.startPos.x, current.x),
             y: Math.min(this.startPos.y, current.y),
             w: Math.abs(current.x - this.startPos.x),
             h: Math.abs(current.y - this.startPos.y)
-        };
+        });
         this.view.drawSelection(this.model.selection);
     }
 
     async handleMouseUp() {
-        if (this.floatingDrag) {
-            this.model.endFloatingDrag();
-            this.floatingDrag = null;
+        if (this.selectionDrag) {
+            this.model.selection.endDrag();
+            this.selectionDrag = null;
             return;
         }
 

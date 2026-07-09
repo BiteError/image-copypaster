@@ -135,6 +135,36 @@ describe('render', () => {
     expect(x).toBe(0);
     expect(y).toBe(0);
   });
+
+  describe('ui-layer pointer-events', () => {
+    test('is none with no selection at all, so a fresh drag reaches the image canvas underneath', async () => {
+      stubWindowSize(2000, 2000);
+      const bitmap = await create_test_bitmap();
+
+      view.render(bitmap, null);
+
+      expect(view.uiCanvas.style.pointerEvents).toBe('none');
+    });
+
+    test('is auto for a marquee selection, so its handles are clickable (new: handles now precede any paste)', async () => {
+      stubWindowSize(2000, 2000);
+      const bitmap = await create_test_bitmap();
+
+      view.render(bitmap, { type: 'rect', x: 0, y: 0, w: 10, h: 10 });
+
+      expect(view.uiCanvas.style.pointerEvents).toBe('auto');
+    });
+
+    test('is auto while a floating layer is active', async () => {
+      stubWindowSize(2000, 2000);
+      const bitmap = await create_test_bitmap();
+      const floating = { x: 0, y: 0, w: 10, h: 10, shape: 'rect', bitmap };
+
+      view.render(bitmap, null, floating);
+
+      expect(view.uiCanvas.style.pointerEvents).toBe('auto');
+    });
+  });
 });
 
 describe('resize', () => {
@@ -176,29 +206,39 @@ describe('drawSelection', () => {
   test('draws a stroked, dashed rect at the selection bounds', () => {
     view.zoom = 2;
     const sel = { type: 'rect', x: 10, y: 20, w: 30, h: 40 };
+    const outlineSpy = vi.spyOn(view, 'strokeOutline');
 
     view.drawSelection(sel);
 
     expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
-    expect(uiCtx.strokeStyle).toBe('#00ff00');
-    expect(uiCtx.lineWidth).toBe(1); // 2 / zoom(2)
-    expect(uiCtx.setLineDash).toHaveBeenCalledWith([2.5, 2.5]); // 5 / zoom(2)
+    expect(outlineSpy).toHaveBeenCalledWith('rect', 10, 20, 30, 40, '#00ff00');
     expect(uiCtx.strokeRect).toHaveBeenCalledWith(10, 20, 30, 40);
     expect(uiCtx.ellipse).not.toHaveBeenCalled();
+  });
+
+  test('draws 8 resize handles for a marquee selection too (new: handles now precede any paste)', () => {
+    view.zoom = 1;
+    const sel = { type: 'rect', x: 10, y: 20, w: 30, h: 40 };
+
+    view.drawSelection(sel);
+
+    expect(uiCtx.fillRect).toHaveBeenCalledTimes(8);
+    expect(uiCtx.strokeRect).toHaveBeenCalledTimes(1 + 8); // outline + 8 handles
   });
 
   test('draws a stroked, dashed ellipse at the selection bounds when shape is ellipse', () => {
     view.zoom = 2;
     const sel = { type: 'ellipse', x: 10, y: 20, w: 30, h: 40 };
+    const outlineSpy = vi.spyOn(view, 'strokeOutline');
 
     view.drawSelection(sel);
 
     expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
-    expect(uiCtx.strokeStyle).toBe('#00ff00');
-    expect(uiCtx.lineWidth).toBe(1); // 2 / zoom(2)
-    expect(uiCtx.setLineDash).toHaveBeenCalledWith([2.5, 2.5]); // 5 / zoom(2)
+    expect(outlineSpy).toHaveBeenCalledWith('ellipse', 10, 20, 30, 40, '#00ff00');
     expect(uiCtx.ellipse).toHaveBeenCalledWith(25, 40, 15, 20, 0, 0, Math.PI * 2);
-    expect(uiCtx.strokeRect).not.toHaveBeenCalled();
+    // strokeRect is still called for the 8 handles, but never for a 30x40 bounding-box outline
+    expect(uiCtx.strokeRect).not.toHaveBeenCalledWith(10, 20, 30, 40);
+    expect(uiCtx.strokeRect).toHaveBeenCalledTimes(8);
   });
 
   describe('with a floating layer', () => {
