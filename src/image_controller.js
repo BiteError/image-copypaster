@@ -8,6 +8,7 @@ export default class ImageController {
         this.isSelecting = false;
         this.startPos = { x: 0, y: 0 };
         this.floatingDrag = null; // truthy while dragging a floating layer's move/resize gesture
+        this.toolbar = document.getElementById('toolbar');
 
         this.initListeners();
         this.view.setShapeMode(this.model.shapeMode);
@@ -218,6 +219,11 @@ export default class ImageController {
     }
 
     async handleMouseDown(e) {
+        // mousedown/mouseup are bound on window (not scoped to the canvas), so toolbar
+        // clicks bubble through here too. Bail out before touching any selection/floating
+        // state so a toolbar click's own click handler still runs normally afterward.
+        if (e.target instanceof Node && this.toolbar.contains(e.target)) return;
+
         if(this.model.isEmpty()) return;
 
         if (this.model.hasFloatingLayer()) {

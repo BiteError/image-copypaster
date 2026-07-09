@@ -747,6 +747,33 @@ describe('floating layer commit triggers', () => {
   });
 });
 
+describe('toolbar clicks while a floating layer is active', () => {
+  async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'rect', x, y, w, h };
+    await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
+  }
+
+  // Regression test for the bug where a real click (mousedown -> mouseup -> click)
+  // on a toolbar button bubbled through the window-level mousedown/mouseup listeners
+  // first: mousedown saw the click as "outside the floating box" and committed it,
+  // then mouseup reset model.selection to null before the button's own click handler
+  // (e.g. rotate) ever ran.
+  test('a real mousedown+mouseup+click on a toolbar button rotates the floating layer in place instead of committing it', async () => {
+    await setupFloatingLayer();
+    const rotateSpy = vi.spyOn(model.floatingLayer, 'rotate');
+    const btn = document.getElementById('rotate-btn');
+
+    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    btn.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.hasFloatingLayer()).toBe(true);
+    expect(rotateSpy).toHaveBeenCalledWith('cw');
+    expect(fakeView.render).toHaveBeenCalled();
+  });
+});
+
 describe('handleManipulate / toolbar button wiring', () => {
   test.each([
     ['flip-horizontally-btn', 'flipH'],
