@@ -16,7 +16,7 @@ export default class ImageController {
 
     render_view(){
         if(this.model.mainImage.isEmpty()) return;
-        this.view.render(this.model.mainImage, this.model.selection, this.model.alphaKey, this.model.colorTolerance);
+        this.view.render(this.model.mainImage, this.model.selection, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
     }
 
     async commitFloating() {
@@ -38,6 +38,8 @@ export default class ImageController {
             .addEventListener('click', e => this.handleTransparencyToggle(e));
         document.getElementById('tolerance-slider')
             .addEventListener('input', e => this.handleToleranceChange(e));
+        document.getElementById('shape-slider')
+            .addEventListener('input', e => this.handleShapeExponentChange(e));
         document.getElementById('flip-horizontally-btn')
             .addEventListener('click', e => this.handleManipulate('flipH'));
         document.getElementById('flip-vertically-btn')
@@ -118,7 +120,7 @@ export default class ImageController {
             if (this.model.notEmpty()) {
                 this.model.selectAll();
                 this.model.updateCopyBlob();
-                this.view.drawSelection(this.model.selection);
+                this.view.drawSelection(this.model.selection, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
             }
         }
         // Cancel the floating layer
@@ -193,7 +195,7 @@ export default class ImageController {
         this.model.shapeMode = this.model.shapeMode === 'ellipse' ? 'rect' : 'ellipse';
         if (this.model.selection) {
             this.model.setSelectionShape(this.model.shapeMode);
-            this.view.drawSelection(this.model.selection);
+            this.view.drawSelection(this.model.selection, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
             if (!this.isSelecting) {
                 await this.model.updateCopyBlob();
             }
@@ -247,7 +249,7 @@ export default class ImageController {
             const coords = this.getCanvasCoords(e);
             const sel = this.model.selection;
             if (this.model.hasFloatingLayer() && sel.contains(coords)) {
-                this.model.alphaKey = sel.colorAt(coords, this.model.alphaKey, this.model.colorTolerance);
+                this.model.alphaKey = sel.colorAt(coords, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
             } else {
                 this.model.alphaKey = this.model.mainImage.pixel_color(coords.x, coords.y);
             }
@@ -295,7 +297,7 @@ export default class ImageController {
             w: Math.abs(current.x - this.startPos.x),
             h: Math.abs(current.y - this.startPos.y)
         });
-        this.view.drawSelection(this.model.selection);
+        this.view.drawSelection(this.model.selection, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
     }
 
     async handleMouseUp() {
@@ -340,6 +342,15 @@ export default class ImageController {
         this.model.colorTolerance = Number(e.target.value);
         if (this.model.hasFloatingLayer()) {
             this.render_view();
+        }
+    }
+
+    handleShapeExponentChange(e) {
+        this.model.shapeExponent = Number(e.target.value);
+        if (!this.model.selection) return;
+        this.view.drawSelection(this.model.selection, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
+        if (!this.model.hasFloatingLayer()) {
+            this.model.updateCopyBlob();
         }
     }
 }

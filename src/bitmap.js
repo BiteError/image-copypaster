@@ -98,14 +98,17 @@ export class JimpBitmap {
         return this.update();
     }
 
-    mask_ellipse(){
+    // exponent=2 is a plain ellipse (nx^2 + ny^2 > 1). Lower exponents pinch the
+    // corners toward a diamond, higher ones square them off toward a rounded rect -
+    // see the Roundness slider in CONTEXT.md.
+    mask_ellipse(exponent = 2){
         const data = this.data();
         const rx = this.width / 2;
         const ry = this.height / 2;
         this.jimp_container.scan(0, 0, this.width, this.height, (x, y, idx) => {
             const nx = (x + 0.5 - rx) / rx;
             const ny = (y + 0.5 - ry) / ry;
-            if (nx * nx + ny * ny > 1) {
+            if (Math.pow(Math.abs(nx), exponent) + Math.pow(Math.abs(ny), exponent) > 1) {
                 data[idx+3] = 0;
             }
         });

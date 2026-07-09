@@ -14,6 +14,7 @@ export default class ImageModel {
         this.shapeMode = 'rect'; // shape of the next selection drawn
         this.alphaKey = null; // {r, g, b}
         this.colorTolerance = 10; // 0-100, how close a color must be to alphaKey to match
+        this.shapeExponent = 2; // 1 (diamond) - 8 (rounded rect), 2 is a plain ellipse
         this.pendingCopyBlob = null;
     }
 
@@ -122,7 +123,7 @@ export default class ImageModel {
     // subsequent copy/manipulate operate on the region the content landed in.
     async commitFloatingLayer() {
         if (!this.hasFloatingLayer()) return;
-        const transformed = this.selection.preview(this.alphaKey, this.colorTolerance);
+        const transformed = this.selection.preview(this.alphaKey, this.colorTolerance, this.shapeExponent);
         const { x, y, w, h } = this.selection.bounds();
         this.mainImage.composite(transformed, x, y);
         this.selection.exitFloating();
@@ -140,7 +141,7 @@ export default class ImageModel {
         if (this.isEmpty() || !this.selection) return;
         const { x, y, w, h } = this.selection;
         const cropped = this.mainImage.clone().crop(x, y, w, h);
-        if (this.selection.type === 'ellipse') cropped.mask_ellipse();
+        if (this.selection.type === 'ellipse') cropped.mask_ellipse(this.shapeExponent);
         const buffer = await cropped.getBufferAsync();
         this.pendingCopyBlob = new Blob([buffer], { type: 'image/png' });
     }

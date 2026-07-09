@@ -25,6 +25,7 @@ export default class ImageView {
         this.transparencyToggle = document.getElementById('transparency-toggle');
         this.transparencyToggle.checked = false;
         this.toleranceSlider = document.getElementById('tolerance-slider');
+        this.shapeSlider = document.getElementById('shape-slider');
 
         this.shapeToggle = document.getElementById('shape-toggle-btn');
     }
@@ -35,7 +36,7 @@ export default class ImageView {
         this.resize(300, 150);
     }
 
-    render(bitmap, selection, alphaKey, colorTolerance) {
+    render(bitmap, selection, alphaKey, colorTolerance, shapeExponent) {
         if (!bitmap) return;
         const width = bitmap.width;
         const height = bitmap.height;
@@ -55,7 +56,7 @@ export default class ImageView {
         // to catch its own handle/drag interactions instead.
         this.uiCanvas.style.pointerEvents = selection ? 'auto' : 'none';
 
-        this.drawSelection(selection, alphaKey, colorTolerance);
+        this.drawSelection(selection, alphaKey, colorTolerance, shapeExponent);
     }
 
     toImageData(bitmap) {
@@ -75,17 +76,17 @@ export default class ImageView {
         this.uiCanvas.style.height = (height * this.zoom) + 'px';
     }
 
-    drawSelection(sel, alphaKey, colorTolerance) {
+    drawSelection(sel, alphaKey, colorTolerance, shapeExponent = 2) {
         this.uiCtx.clearRect(0, 0, this.uiCanvas.width, this.uiCanvas.height);
 
         if (!sel) return;
 
         if (sel.isFloating) {
-            const bitmap = sel.preview(alphaKey, colorTolerance);
+            const bitmap = sel.preview(alphaKey, colorTolerance, shapeExponent);
             this.uiCtx.putImageData(this.toImageData(bitmap), sel.x, sel.y);
-            this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, FLOATING_LAYER_COLOR);
+            this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, FLOATING_LAYER_COLOR, shapeExponent);
         } else {
-            this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, SELECTION_COLOR);
+            this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, SELECTION_COLOR, shapeExponent);
         }
         this.drawHandles(sel);
     }
@@ -121,17 +122,38 @@ export default class ImageView {
         }
     }
 
-    strokeOutline(type, x, y, w, h, color) {
+    strokeOutline(type, x, y, w, h, color, shapeExponent = 2) {
         this.uiCtx.strokeStyle = color;
         // Adjust line width based on zoom so it always looks "1px" or "2px"
         this.uiCtx.lineWidth = 2 / this.zoom;
         this.uiCtx.setLineDash([5 / this.zoom, 5 / this.zoom]);
         if (type === 'ellipse') {
             this.uiCtx.beginPath();
-            this.uiCtx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+            this.#traceSuperellipse(x, y, w, h, shapeExponent);
             this.uiCtx.stroke();
         } else {
             this.uiCtx.strokeRect(x, y, w, h);
+        }
+    }
+
+    // Canvas has no native superellipse primitive, so the outline is sampled from the
+    // Lamé parametric form matching mask_ellipse's implicit |nx|^n + |ny|^n > 1 - at
+    // shapeExponent=2 this reduces exactly to the ctx.ellipse() path it replaced.
+    #traceSuperellipse(x, y, w, h, shapeExponent) {
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const rx = w / 2;
+        const ry = h / 2;
+        const k = 2 / shapeExponent;
+        const steps = 90;
+        for (let i = 0; i <= steps; i++) {
+            const t = (i / steps) * Math.PI * 2;
+            const cosT = Math.cos(t);
+            const sinT = Math.sin(t);
+            const px = cx + rx * Math.sign(cosT) * Math.abs(cosT) ** k;
+            const py = cy + ry * Math.sign(sinT) * Math.abs(sinT) ** k;
+            if (i === 0) this.uiCtx.moveTo(px, py);
+            else this.uiCtx.lineTo(px, py);
         }
     }
 

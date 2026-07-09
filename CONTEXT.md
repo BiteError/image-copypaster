@@ -52,6 +52,10 @@ _Avoid_: color-to-alpha, transparency toggle
 A user-configurable 0-100 value scoping how close a pixel's color must be to the Alpha Key (by RGB distance) to count as a match during Alpha Paste. Zero matches the Alpha Key color exactly; higher values also catch near-miss pixels such as anti-aliased edges.
 _Avoid_: threshold, fuzziness, sensitivity
 
+**Roundness**:
+A user-configurable 1-8 exponent applied to the elliptical Shape's mask and outline (`|nx|^n + |ny|^n > 1`), letting an elliptical Selection morph continuously from a diamond (near 1) through a plain ellipse (2, the default) to a rounded rectangle (toward 8). Has no effect on a rectangular Selection.
+_Avoid_: shape exponent, superellipse factor
+
 **Bitmap**:
 The pixel-data representation of the Canvas or of a cropped/pasted fragment, wrapping the underlying image-processing library so the rest of the app never touches it directly.
 _Avoid_: image object, jimp image

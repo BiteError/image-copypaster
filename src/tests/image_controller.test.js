@@ -292,7 +292,7 @@ describe('handleKeyDown', () => {
 
     expect(model.selection).toMatchObject({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
     expect(updateCopyBlobSpy).toHaveBeenCalled();
-    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
   });
 
   test('Ctrl/Cmd+A does nothing on an empty model', () => {
@@ -441,7 +441,7 @@ describe('handleKeyDown', () => {
     dispatchKey(' ');
 
     expect(model.selection.type).toBe('ellipse');
-    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
     expect(updateCopyBlobSpy).not.toHaveBeenCalled();
   });
 
@@ -458,7 +458,7 @@ describe('handleKeyDown', () => {
     await vi.waitFor(() => expect(updateCopyBlobSpy).toHaveBeenCalled());
 
     expect(model.selection.type).toBe('ellipse');
-    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
   });
 
   describe('arrow-key nudge', () => {
@@ -516,7 +516,7 @@ describe('shape-toggle-btn', () => {
     await vi.waitFor(() => expect(updateCopyBlobSpy).toHaveBeenCalled());
 
     expect(model.selection.type).toBe('ellipse');
-    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
   });
 });
 
@@ -567,7 +567,7 @@ describe('handleMouseDown', () => {
 
     dispatchMouseDown({ clientX: 0, clientY: 0, altKey: true });
 
-    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
   });
 
   test('alt+shift+click clears alphaKey', async () => {
@@ -610,7 +610,7 @@ describe('handleMouseDown', () => {
 
       dispatchMouseDown({ clientX: 20, clientY: 20, altKey: true });
 
-      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
     });
 
     test('alt+click outside the bounds samples from mainImage, unchanged', async () => {
@@ -626,7 +626,7 @@ describe('handleMouseDown', () => {
 
       dispatchMouseDown({ clientX: 90, clientY: 90, altKey: true });
 
-      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
     });
 
     test('alt+click does not begin a resize/move gesture', async () => {
@@ -655,7 +655,7 @@ describe('handleMouseDown', () => {
 
       dispatchMouseDown({ clientX: 40, clientY: 40, altKey: true, shiftKey: true });
 
-      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, null, model.colorTolerance);
+      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, null, model.colorTolerance, model.shapeExponent);
     });
   });
 });
@@ -679,7 +679,7 @@ describe('handleMouseMove', () => {
     dispatchMouseMove({ clientX: 20, clientY: 30 });
 
     expect(model.selection).toMatchObject({ type: 'rect', x: 20, y: 30, w: 30, h: 20 });
-    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
   });
 });
 
@@ -976,7 +976,7 @@ describe('handleTransparencyToggle / transparency-toggle', () => {
 
     document.getElementById('transparency-toggle').dispatchEvent(new Event('click', { bubbles: true }));
 
-    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
   });
 
   test('does not render when the canvas is empty', () => {
@@ -994,7 +994,7 @@ describe('handleTransparencyToggle / transparency-toggle', () => {
 
     document.getElementById('transparency-toggle').dispatchEvent(new Event('click', { bubbles: true }));
 
-    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
   });
 });
 
@@ -1026,6 +1026,53 @@ describe('handleToleranceChange / tolerance-slider', () => {
 
     slider.dispatchEvent(new Event('input', { bubbles: true }));
 
-    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, 42);
+    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, 42, model.shapeExponent);
+  });
+});
+
+describe('handleShapeExponentChange / shape-slider', () => {
+  test('updates model.shapeExponent from the slider value', () => {
+    const slider = document.getElementById('shape-slider');
+    slider.value = '4';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(model.shapeExponent).toBe(4);
+  });
+
+  test('does not touch the view when there is no selection', () => {
+    const slider = document.getElementById('shape-slider');
+    slider.value = '4';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(fakeView.drawSelection).not.toHaveBeenCalled();
+  });
+
+  test('redraws the outline live for a marquee selection and refreshes the pending copy blob', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    model.selection = new Selection({ type: 'ellipse', x: 0, y: 0, w: 40, h: 40 });
+    const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+    const slider = document.getElementById('shape-slider');
+    slider.value = '4';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, 4);
+    expect(updateCopyBlobSpy).toHaveBeenCalled();
+  });
+
+  test('redraws the floating preview live but leaves the pending copy blob alone', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    model.selection = new Selection({ type: 'ellipse', x: 0, y: 0, w: 40, h: 40 });
+    await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
+    const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+    const slider = document.getElementById('shape-slider');
+    slider.value = '4';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, 4);
+    expect(updateCopyBlobSpy).not.toHaveBeenCalled();
   });
 });

@@ -28,6 +28,8 @@ function stubCanvasContext() {
     setLineDash: vi.fn(),
     beginPath: vi.fn(),
     ellipse: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
     stroke: vi.fn(),
     strokeStyle: null,
     fillStyle: null,

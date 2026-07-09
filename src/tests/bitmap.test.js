@@ -155,6 +155,32 @@ test('mask_ellipse zeroes alpha for pixels outside the inscribed ellipse only', 
   expect(data[centerIdx + 3]).toBe(255); // center (5,5), inside the ellipse, untouched
 });
 
+test('mask_ellipse defaults its exponent to 2, a plain ellipse', async () => {
+  const withDefault = await create_solid_bitmap(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+  const withExplicit2 = await create_solid_bitmap(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+  withDefault.mask_ellipse();
+  withExplicit2.mask_ellipse(2);
+
+  expect(Array.from(withDefault.data())).toStrictEqual(Array.from(withExplicit2.data()));
+});
+
+test('mask_ellipse at a low exponent pinches toward a diamond, masking a pixel a plain ellipse keeps', async () => {
+  const bitmap = await create_solid_bitmap(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+  bitmap.mask_ellipse(1);
+
+  const data = bitmap.data();
+  const idx = (1 * 10 + 1) * 4; // (1,1): inside the plain ellipse (nx^2+ny^2=0.98), outside the diamond (|nx|+|ny|=1.4)
+  expect(data[idx + 3]).toBe(0);
+});
+
+test('mask_ellipse at a high exponent squares off toward a rounded rect, keeping a pixel a plain ellipse masks', async () => {
+  const bitmap = await create_solid_bitmap(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+  bitmap.mask_ellipse(8);
+
+  const data = bitmap.data();
+  expect(data[3]).toBe(255); // corner (0,0): outside the plain ellipse, inside the exponent-8 shape
+});
+
 test('getBufferAsync returns a PNG buffer that can be decoded back', async () => {
   const bitmap = await create_test_bitmap();
   const buffer = await bitmap.getBufferAsync();

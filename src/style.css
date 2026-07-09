@@ -49,6 +49,7 @@ canvas {
 
 #ui-layer {
   pointer-events: none;
+  cursor: crosshair;
 }
 
 button {

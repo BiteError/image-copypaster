@@ -188,6 +188,17 @@ describe('preview', () => {
     expect(data[centerIdx + 3]).toBe(255); // center, inside the ellipse
   });
 
+  test('forwards shapeExponent to mask_ellipse, reshaping the mask for shape:"ellipse"', async () => {
+    const original = await create_solid_bitmap(10, 10, BLACK);
+    const sel = makeMarquee(0, 0, 10, 10, 'ellipse');
+    sel.enterTransientFloating(original);
+
+    // (1,1): inside the default (exponent 2) ellipse mask, outside the exponent-1 diamond mask
+    const idx = (1 * 10 + 1) * 4;
+    expect(sel.preview().data()[idx + 3]).toBe(255);
+    expect(sel.preview(null, 0, 1).data()[idx + 3]).toBe(0);
+  });
+
   test('leaves corners opaque for shape:"rect"', async () => {
     const original = await create_solid_bitmap(20, 20, BLACK);
     const sel = makeMarquee(0, 0, 20, 20, 'rect');

@@ -121,7 +121,7 @@ describe('render', () => {
 
     view.render(bitmap, selection);
 
-    expect(drawSelectionSpy).toHaveBeenCalledWith(selection, undefined, undefined);
+    expect(drawSelectionSpy).toHaveBeenCalledWith(selection, undefined, undefined, undefined);
   });
 
   test('calls through to drawSelection with a floating selection', async () => {
@@ -132,7 +132,7 @@ describe('render', () => {
 
     view.render(bitmap, floating);
 
-    expect(drawSelectionSpy).toHaveBeenCalledWith(floating, undefined, undefined);
+    expect(drawSelectionSpy).toHaveBeenCalledWith(floating, undefined, undefined, undefined);
   });
 
   test('forwards alphaKey/colorTolerance through to drawSelection', async () => {
@@ -144,7 +144,7 @@ describe('render', () => {
 
     view.render(bitmap, floating, alphaKey, 42);
 
-    expect(drawSelectionSpy).toHaveBeenCalledWith(floating, alphaKey, 42);
+    expect(drawSelectionSpy).toHaveBeenCalledWith(floating, alphaKey, 42, undefined);
   });
 
   test('draws the bitmap pixel data via putImageData', async () => {
@@ -237,7 +237,7 @@ describe('drawSelection', () => {
     view.drawSelection(sel);
 
     expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
-    expect(outlineSpy).toHaveBeenCalledWith('rect', 10, 20, 30, 40, '#00ff00');
+    expect(outlineSpy).toHaveBeenCalledWith('rect', 10, 20, 30, 40, '#00ff00', 2);
     expect(uiCtx.strokeRect).toHaveBeenCalledWith(10, 20, 30, 40);
     expect(uiCtx.ellipse).not.toHaveBeenCalled();
   });
@@ -260,11 +260,32 @@ describe('drawSelection', () => {
     view.drawSelection(sel);
 
     expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
-    expect(outlineSpy).toHaveBeenCalledWith('ellipse', 10, 20, 30, 40, '#00ff00');
-    expect(uiCtx.ellipse).toHaveBeenCalledWith(25, 40, 15, 20, 0, 0, Math.PI * 2);
+    expect(outlineSpy).toHaveBeenCalledWith('ellipse', 10, 20, 30, 40, '#00ff00', 2);
+    // no native canvas primitive for a superellipse - the outline is traced as a polyline,
+    // starting at the rightmost point of the bounding ellipse (center + (rx, 0))
+    expect(uiCtx.ellipse).not.toHaveBeenCalled();
+    expect(uiCtx.moveTo).toHaveBeenCalledWith(40, 40);
+    expect(uiCtx.lineTo).toHaveBeenCalledTimes(90);
     // strokeRect is still called for the 8 handles, but never for a 30x40 bounding-box outline
     expect(uiCtx.strokeRect).not.toHaveBeenCalledWith(10, 20, 30, 40);
     expect(uiCtx.strokeRect).toHaveBeenCalledTimes(8);
+  });
+
+  test('a lower shape exponent pulls the traced outline in toward a diamond', () => {
+    const sel = { type: 'ellipse', x: 0, y: 0, w: 40, h: 40 };
+
+    view.drawSelection(sel, undefined, undefined, 2);
+    const ellipseFirstLineTo = uiCtx.lineTo.mock.calls[0];
+    uiCtx.lineTo.mockClear();
+    uiCtx.moveTo.mockClear();
+
+    view.drawSelection(sel, undefined, undefined, 1);
+    const diamondFirstLineTo = uiCtx.lineTo.mock.calls[0];
+
+    // t=0 is the rightmost vertex (cx+rx, cy) regardless of exponent
+    expect(uiCtx.moveTo).toHaveBeenCalledWith(40, 20);
+    // but away from that vertex, a lower exponent pulls the x coordinate in faster
+    expect(diamondFirstLineTo[0]).toBeLessThan(ellipseFirstLineTo[0]);
   });
 
   describe('with a floating layer', () => {
@@ -288,15 +309,17 @@ describe('drawSelection', () => {
 
       view.drawSelection(floating, alphaKey, 42);
 
-      expect(previewSpy).toHaveBeenCalledWith(alphaKey, 42);
+      expect(previewSpy).toHaveBeenCalledWith(alphaKey, 42, 2);
     });
 
-    test('outlines with an ellipse when the floating shape is ellipse', async () => {
+    test('outlines with a superellipse when the floating shape is ellipse', async () => {
       const floating = await makeFloating(0, 0, 30, 40, 'ellipse');
 
       view.drawSelection(floating);
 
-      expect(uiCtx.ellipse).toHaveBeenCalledWith(15, 20, 15, 20, 0, 0, Math.PI * 2);
+      expect(uiCtx.ellipse).not.toHaveBeenCalled();
+      expect(uiCtx.moveTo).toHaveBeenCalledWith(30, 20);
+      expect(uiCtx.lineTo).toHaveBeenCalledTimes(90);
       // strokeRect is still called for the 8 handles, but never for a 30x40 bounding-box outline
       expect(uiCtx.strokeRect).not.toHaveBeenCalledWith(0, 0, 30, 40);
     });

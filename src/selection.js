@@ -176,7 +176,7 @@ export default class Selection {
     // so repeated rotate/flip/resize/re-keying while floating never compounds lossy
     // transforms onto a previously-transformed copy. Color-keying happens first, at
     // native resolution, so tolerance matching isn't skewed by resize interpolation.
-    preview(alphaKey = null, colorTolerance = 0) {
+    preview(alphaKey = null, colorTolerance = 0, shapeExponent = 2) {
         const bmp = this.original.clone();
 
         if (alphaKey) bmp.make_color_transparent(alphaKey, toleranceToDistance(colorTolerance));
@@ -189,14 +189,14 @@ export default class Selection {
 
         bmp.resize(this.w, this.h);
 
-        if (this.type === 'ellipse') bmp.mask_ellipse();
+        if (this.type === 'ellipse') bmp.mask_ellipse(shapeExponent);
 
         return bmp;
     }
 
     // Samples the color at a canvas coordinate from the live, color-keyed preview -
     // used for Alt+click sampling when the click lands inside a Floating Layer.
-    colorAt(coords, alphaKey, colorTolerance) {
-        return this.preview(alphaKey, colorTolerance).pixel_color(coords.x - this.x, coords.y - this.y);
+    colorAt(coords, alphaKey, colorTolerance, shapeExponent) {
+        return this.preview(alphaKey, colorTolerance, shapeExponent).pixel_color(coords.x - this.x, coords.y - this.y);
     }
 }
