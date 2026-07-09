@@ -8,8 +8,27 @@ import { create_solid_png_buffer } from './test_helpers.js'
 const WHITE = { r: 255, g: 255, b: 255 };
 const BLACK = { r: 0, g: 0, b: 0 };
 
+// Mirrors ImageView.getHandleRects's geometry (8 handles at corners/edge-midpoints,
+// HANDLE_SIZE 8 at zoom 1) so hit-testing tests exercise real-ish coordinates.
+const HANDLE_POSITIONS = {
+  nw: [0, 0], n: [0.5, 0], ne: [1, 0],
+  w: [0, 0.5], e: [1, 0.5],
+  sw: [0, 1], s: [0.5, 1], se: [1, 1],
+};
+
+function fakeGetHandleRects(bounds, zoom = 1) {
+  const size = 8 / zoom;
+  return Object.entries(HANDLE_POSITIONS).map(([type, [px, py]]) => ({
+    type,
+    x: bounds.x + bounds.w * px - size / 2,
+    y: bounds.y + bounds.h * py - size / 2,
+    w: size,
+    h: size,
+  }));
+}
+
 function makeFakeView() {
-  return {
+  const view = {
     render: vi.fn(),
     drawSelection: vi.fn(),
     setAlphaColor: vi.fn(),
@@ -18,6 +37,8 @@ function makeFakeView() {
     imgCanvas: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
     zoom: 1,
   };
+  view.getHandleRects = vi.fn(bounds => fakeGetHandleRects(bounds, view.zoom));
+  return view;
 }
 
 function fakeImageFile(buffer) {
@@ -61,6 +82,24 @@ test('constructs against the real fixture without throwing', () => {
   expect(controller).toBeInstanceOf(ImageController);
 });
 
+describe('getFloatingRenderInfo', () => {
+  test('returns null when there is no floating layer', () => {
+    expect(controller.getFloatingRenderInfo()).toBeNull();
+  });
+
+  test('returns bounds, shape, and a fresh preview bitmap when a floating layer is active', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'ellipse', x: 10, y: 20, w: 30, h: 40 };
+    await model.pasteIntoSelection(await create_solid_png_buffer(30, 40, BLACK));
+
+    const info = controller.getFloatingRenderInfo();
+
+    expect(info).toMatchObject({ x: 10, y: 20, w: 30, h: 40, shape: 'ellipse' });
+    expect(info.bitmap.width).toBe(30);
+    expect(info.bitmap.height).toBe(40);
+  });
+});
+
 describe('handlePaste', () => {
   test('ignores non-image clipboard items', async () => {
     const createNewSpy = vi.spyOn(model, 'createNew');
@@ -93,6 +132,36 @@ describe('handlePaste', () => {
     await vi.waitFor(() => expect(pasteSpy).toHaveBeenCalled());
     await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
   });
+
+  test('re-pasting while a floating layer is active commits the old one first, then floats the new image', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'rect', x: 10, y: 10, w: 20, h: 20 };
+    await model.pasteIntoSelection(await create_solid_png_buffer(20, 20, BLACK));
+
+    const newBuffer = await create_solid_png_buffer(20, 20, { r: 0, g: 255, b: 0 });
+    dispatchPaste([{ type: 'image/png', kind: 'file', ...fakeImageFile(newBuffer) }]);
+
+    await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
+    // old floating content baked into mainImage at its original bounds
+    expect(model.mainImage.pixel_color(15, 15)).toStrictEqual(BLACK);
+    // a fresh floating layer holds the newly pasted image, at the (unchanged) selection bounds
+    expect(model.hasFloatingLayer()).toBe(true);
+    expect(model.floatingLayer).toMatchObject({ x: 10, y: 10, w: 20, h: 20 });
+    expect(model.floatingLayer.original.pixel_color(0, 0)).toStrictEqual({ r: 0, g: 255, b: 0 });
+    expect(model.history).toHaveLength(2); // createNew + the auto-commit; the new paste isn't committed yet
+  });
+
+  test('pasting when no floating layer is active behaves exactly as a first-time paste', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'rect', x: 0, y: 0, w: 50, h: 50 };
+    const commitSpy = vi.spyOn(model, 'commitFloatingLayer');
+    const buffer = await create_solid_png_buffer(50, 50, BLACK);
+
+    dispatchPaste([{ type: 'image/png', kind: 'file', ...fakeImageFile(buffer) }]);
+
+    await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
+    expect(commitSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('handleCopy', () => {
@@ -112,6 +181,21 @@ describe('handleCopy', () => {
 
     expect(navigator.clipboard.write).toHaveBeenCalledWith([expect.any(ClipboardItem)]);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  test('commits the floating layer first, then copies the now-updated canvas region', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+    await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
+
+    const event = dispatchCopy();
+
+    expect(event.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(model.hasFloatingLayer()).toBe(false));
+    expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(BLACK);
+    await vi.waitFor(() => expect(navigator.clipboard.write).toHaveBeenCalledWith([expect.any(ClipboardItem)]));
+    // pendingCopyBlob was refreshed from the committed canvas, not the floating preview
+    expect(model.pendingCopyBlob).toBeInstanceOf(Blob);
   });
 });
 
@@ -160,6 +244,59 @@ describe('handleKeyDown', () => {
     expect(fakeView.render).toHaveBeenCalled();
   });
 
+  describe('undo/redo suppression while a floating layer is active', () => {
+    async function setupFloatingLayer() {
+      await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+      await model.createNew(await create_solid_png_buffer(110, 100, WHITE));
+      model.selection = { type: 'rect', x: 0, y: 0, w: 50, h: 50 };
+      await model.pasteIntoSelection(await create_solid_png_buffer(50, 50, BLACK));
+    }
+
+    test('Ctrl/Cmd+Z is a no-op and does not touch the history stack', async () => {
+      await setupFloatingLayer();
+      const historyBefore = [...model.history];
+
+      dispatchKey('z', { ctrlKey: true });
+
+      expect(model.history).toStrictEqual(historyBefore);
+      expect(model.hasFloatingLayer()).toBe(true);
+      expect(fakeView.render).not.toHaveBeenCalled();
+    });
+
+    test('Ctrl/Cmd+Y is a no-op and does not touch the history stack', async () => {
+      await setupFloatingLayer();
+      const historyBefore = [...model.history];
+
+      dispatchKey('y', { ctrlKey: true });
+
+      expect(model.history).toStrictEqual(historyBefore);
+      expect(model.hasFloatingLayer()).toBe(true);
+      expect(fakeView.render).not.toHaveBeenCalled();
+    });
+
+    test('undo/redo resume normal behavior immediately after commit', async () => {
+      await setupFloatingLayer();
+      await model.commitFloatingLayer();
+      fakeView.render.mockClear();
+
+      dispatchKey('z', { ctrlKey: true });
+
+      expect(model.mainImage.width).toBe(110); // reverted to the pre-commit snapshot
+      expect(fakeView.render).toHaveBeenCalled();
+    });
+
+    test('undo/redo resume normal behavior immediately after cancel', async () => {
+      await setupFloatingLayer();
+      model.cancelFloatingLayer();
+      fakeView.render.mockClear();
+
+      dispatchKey('z', { ctrlKey: true });
+
+      expect(model.mainImage.width).toBe(100);
+      expect(fakeView.render).toHaveBeenCalled();
+    });
+  });
+
   test('Ctrl/Cmd+A selects the full image, updates the copy blob, and draws the selection', async () => {
     await model.createNew(await create_solid_png_buffer(120, 80, WHITE));
     const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
@@ -188,6 +325,27 @@ describe('handleKeyDown', () => {
     expect(model.shapeMode).toBe('ellipse'); // Select All neither reads nor writes shape mode
   });
 
+  test('Enter commits the floating layer', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+    await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
+
+    dispatchKey('Enter');
+
+    await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
+    expect(model.hasFloatingLayer()).toBe(false);
+    expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(BLACK);
+  });
+
+  test('Enter does nothing without a floating layer', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    const historyLengthBefore = model.history.length;
+
+    dispatchKey('Enter');
+
+    expect(model.history).toHaveLength(historyLengthBefore);
+  });
+
   test('Escape clears isSelecting and selection', () => {
     controller.isSelecting = true;
     model.selection = { x: 0, y: 0, w: 10, h: 10 };
@@ -197,6 +355,21 @@ describe('handleKeyDown', () => {
     expect(controller.isSelecting).toBe(false);
     expect(model.selection).toBeNull();
     expect(fakeView.drawSelection).toHaveBeenCalledWith(null);
+  });
+
+  test('Escape cancels the floating layer instead of deselecting, with no history entry', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'rect', x: 50, y: 50, w: 100, h: 100 };
+    await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
+    const historyLengthBefore = model.history.length;
+
+    dispatchKey('Escape');
+
+    expect(model.hasFloatingLayer()).toBe(false);
+    expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE); // canvas reverted, nothing was ever baked in
+    expect(model.history).toHaveLength(historyLengthBefore);
+    expect(model.selection).toStrictEqual({ type: 'rect', x: 50, y: 50, w: 100, h: 100 }); // the pre-paste selection survives
+    expect(fakeView.render).toHaveBeenCalled();
   });
 
   test('r/h/v trigger manipulateSelection with the right direction when a selection exists', async () => {
@@ -214,6 +387,17 @@ describe('handleKeyDown', () => {
     expect(manipulateSpy).toHaveBeenLastCalledWith('flipV');
 
     expect(fakeView.render).toHaveBeenCalled();
+  });
+
+  test('r/h/v update the floating layer transform, not mainImage, when a floating layer is active', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    model.selection = { type: 'rect', x: 0, y: 0, w: 40, h: 40 };
+    await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
+
+    dispatchKey('r');
+
+    expect(model.floatingLayer.rotation).toBe(90);
+    expect(model.mainImage.pixel_color(10, 10)).toStrictEqual(WHITE);
   });
 
   test('shift+r maps to rotateCCW', async () => {
@@ -288,6 +472,41 @@ describe('handleKeyDown', () => {
 
     expect(model.selection.type).toBe('ellipse');
     expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection);
+  });
+
+  describe('arrow-key nudge', () => {
+    async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
+      await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+      model.selection = { type: 'rect', x, y, w, h };
+      await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
+    }
+
+    test('moves the floating layer 1px per arrow press', async () => {
+      await setupFloatingLayer();
+
+      dispatchKey('ArrowRight');
+      dispatchKey('ArrowDown');
+
+      expect(model.floatingLayer).toMatchObject({ x: 21, y: 21 });
+      expect(fakeView.render).toHaveBeenCalled();
+    });
+
+    test('Shift+arrow nudges by the larger step', async () => {
+      await setupFloatingLayer();
+
+      dispatchKey('ArrowLeft', { shiftKey: true });
+      dispatchKey('ArrowUp', { shiftKey: true });
+
+      expect(model.floatingLayer).toMatchObject({ x: 10, y: 10 });
+    });
+
+    test('arrow keys do nothing without a floating layer', async () => {
+      await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+
+      dispatchKey('ArrowRight');
+
+      expect(fakeView.render).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -413,6 +632,132 @@ describe('handleMouseUp', () => {
     dispatchMouseUp();
 
     await vi.waitFor(() => expect(updateCopyBlobSpy).toHaveBeenCalled());
+  });
+});
+
+describe('floating layer move & resize', () => {
+  function dispatchMouseDown(opts = {}) {
+    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
+  }
+  function dispatchMouseMove(opts = {}) {
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, ...opts }));
+  }
+  function dispatchMouseUp() {
+    window.dispatchEvent(new Event('mouseup'));
+  }
+
+  async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'rect', x, y, w, h };
+    await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
+  }
+
+  test('dragging inside the box (not on a handle) moves it', async () => {
+    await setupFloatingLayer();
+
+    dispatchMouseDown({ clientX: 40, clientY: 40 }); // center, well clear of any handle
+    dispatchMouseMove({ clientX: 50, clientY: 55 });
+
+    expect(model.floatingLayer).toMatchObject({ x: 30, y: 35, w: 40, h: 40 });
+    expect(fakeView.render).toHaveBeenCalled();
+  });
+
+  test('dragging a corner handle resizes both axes', async () => {
+    await setupFloatingLayer(); // box: x20 y20 w40 h40 -> se handle at (60,60)
+
+    dispatchMouseDown({ clientX: 60, clientY: 60 });
+    dispatchMouseMove({ clientX: 80, clientY: 70 });
+
+    expect(model.floatingLayer).toMatchObject({ x: 20, y: 20, w: 60, h: 50 });
+  });
+
+  test('dragging an edge handle resizes only its single axis', async () => {
+    await setupFloatingLayer(); // e handle at (60,40)
+
+    dispatchMouseDown({ clientX: 60, clientY: 40 });
+    dispatchMouseMove({ clientX: 90, clientY: 999 }); // y ignored: e handle is horizontal-only
+
+    expect(model.floatingLayer).toMatchObject({ x: 20, y: 20, w: 70, h: 40 });
+  });
+
+  test('Shift locks the aspect ratio while resizing from a corner', async () => {
+    await setupFloatingLayer(); // square 40x40, se handle at (60,60)
+
+    dispatchMouseDown({ clientX: 60, clientY: 60 });
+    dispatchMouseMove({ clientX: 100, clientY: 40, shiftKey: true }); // raw would be 80x20
+
+    expect(model.floatingLayer).toMatchObject({ x: 20, y: 20, w: 80, h: 80 });
+  });
+
+  test('resize is unconstrained without Shift', async () => {
+    await setupFloatingLayer();
+
+    dispatchMouseDown({ clientX: 60, clientY: 60 });
+    dispatchMouseMove({ clientX: 100, clientY: 40 });
+
+    expect(model.floatingLayer).toMatchObject({ x: 20, y: 20, w: 80, h: 20 });
+  });
+
+  test('dragging a corner past the opposite corner flips through without erroring or zero size', async () => {
+    await setupFloatingLayer(); // box x20 y20 w40 h40, nw handle at (20,20), anchor (se) at (60,60)
+
+    dispatchMouseDown({ clientX: 20, clientY: 20 });
+    expect(() => dispatchMouseMove({ clientX: 80, clientY: 80 })).not.toThrow();
+
+    expect(model.floatingLayer).toMatchObject({ x: 60, y: 60, w: 20, h: 20, flipH: true, flipV: true });
+  });
+
+  test('mouseup ends the drag', async () => {
+    await setupFloatingLayer();
+    dispatchMouseDown({ clientX: 40, clientY: 40 });
+
+    dispatchMouseUp();
+
+    expect(controller.floatingDrag).toBeNull();
+  });
+
+  test('mousedown outside the box commits the floating layer, then starts a normal selection drag from there', async () => {
+    await setupFloatingLayer();
+
+    dispatchMouseDown({ clientX: 150, clientY: 150 });
+
+    // isSelecting/startPos are the last things set, after the commit's async chain
+    // settles - waiting on them (rather than the earlier hasFloatingLayer() flip)
+    // avoids racing the intermediate microtask.
+    await vi.waitFor(() => expect(controller.isSelecting).toBe(true));
+    expect(model.hasFloatingLayer()).toBe(false);
+    expect(model.mainImage.pixel_color(30, 30)).toStrictEqual(BLACK); // committed at its original bounds
+    expect(controller.floatingDrag).toBeNull();
+    expect(controller.startPos).toStrictEqual({ x: 150, y: 150 });
+  });
+
+  test('dragging from outside the box commits, then draws a fresh selection from the drag', async () => {
+    await setupFloatingLayer();
+
+    dispatchMouseDown({ clientX: 150, clientY: 150 });
+    await vi.waitFor(() => expect(controller.isSelecting).toBe(true));
+    dispatchMouseMove({ clientX: 170, clientY: 180 });
+
+    expect(model.selection).toStrictEqual({ type: 'rect', x: 150, y: 150, w: 20, h: 30 });
+  });
+});
+
+describe('floating layer commit triggers', () => {
+  async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = { type: 'rect', x, y, w, h };
+    await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
+  }
+
+  test('switching tools (shape toggle) commits the floating layer first', async () => {
+    await setupFloatingLayer();
+
+    document.getElementById('shape-toggle-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(fakeView.setShapeMode).toHaveBeenCalledWith('ellipse'));
+    expect(model.hasFloatingLayer()).toBe(false);
+    expect(model.mainImage.pixel_color(30, 30)).toStrictEqual(BLACK);
+    expect(model.shapeMode).toBe('ellipse'); // the toggle itself still happened
   });
 });
 

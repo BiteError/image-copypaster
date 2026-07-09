@@ -107,7 +107,18 @@ describe('render', () => {
 
     view.render(bitmap, selection);
 
-    expect(drawSelectionSpy).toHaveBeenCalledWith(selection);
+    expect(drawSelectionSpy).toHaveBeenCalledWith(selection, null);
+  });
+
+  test('passes a floating layer through to drawSelection', async () => {
+    stubWindowSize(2000, 2000);
+    const bitmap = await create_test_bitmap();
+    const drawSelectionSpy = vi.spyOn(view, 'drawSelection');
+    const floating = { x: 1, y: 2, w: 3, h: 4, shape: 'rect', bitmap: await create_test_bitmap() };
+
+    view.render(bitmap, null, floating);
+
+    expect(drawSelectionSpy).toHaveBeenCalledWith(null, floating);
   });
 
   test('draws the bitmap pixel data via putImageData', async () => {
@@ -188,6 +199,72 @@ describe('drawSelection', () => {
     expect(uiCtx.setLineDash).toHaveBeenCalledWith([2.5, 2.5]); // 5 / zoom(2)
     expect(uiCtx.ellipse).toHaveBeenCalledWith(25, 40, 15, 20, 0, 0, Math.PI * 2);
     expect(uiCtx.strokeRect).not.toHaveBeenCalled();
+  });
+
+  describe('with a floating layer', () => {
+    test('paints the floating bitmap at its position and outlines it in a distinct color, ignoring sel', async () => {
+      const bitmap = await create_test_bitmap();
+      const floating = { x: 5, y: 6, w: bitmap.width, h: bitmap.height, shape: 'rect', bitmap };
+      const sel = { type: 'rect', x: 100, y: 100, w: 10, h: 10 }; // should be ignored while floating
+
+      view.drawSelection(sel, floating);
+
+      expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
+      const [imageData, x, y] = uiCtx.putImageData.mock.calls[0];
+      expect(imageData.width).toBe(bitmap.width);
+      expect(x).toBe(5);
+      expect(y).toBe(6);
+      expect(uiCtx.strokeRect).toHaveBeenCalledWith(5, 6, bitmap.width, bitmap.height);
+    });
+
+    test('outlines with an ellipse when the floating shape is ellipse', async () => {
+      const bitmap = await create_test_bitmap();
+      const floating = { x: 0, y: 0, w: 30, h: 40, shape: 'ellipse', bitmap };
+
+      view.drawSelection(null, floating);
+
+      expect(uiCtx.ellipse).toHaveBeenCalledWith(15, 20, 15, 20, 0, 0, Math.PI * 2);
+      // strokeRect is still called for the 8 handles, but never for a 30x40 bounding-box outline
+      expect(uiCtx.strokeRect).not.toHaveBeenCalledWith(0, 0, 30, 40);
+    });
+
+    test('renders 8 resize handles at the corners and edge midpoints', async () => {
+      const bitmap = await create_test_bitmap();
+      const floating = { x: 10, y: 20, w: 30, h: 40, shape: 'rect', bitmap };
+
+      view.drawSelection(null, floating);
+
+      expect(uiCtx.fillRect).toHaveBeenCalledTimes(8);
+      expect(uiCtx.strokeRect).toHaveBeenCalledTimes(1 + 8); // outline + 8 handles
+    });
+  });
+});
+
+describe('getHandleRects', () => {
+  test('returns 8 handles centered on the corners and edge midpoints of the bounds', () => {
+    view.zoom = 1;
+    const bounds = { x: 10, y: 20, w: 30, h: 40 };
+
+    const rects = view.getHandleRects(bounds);
+
+    expect(rects).toHaveLength(8);
+    const centers = Object.fromEntries(rects.map(r => [r.type, { x: r.x + r.w / 2, y: r.y + r.h / 2 }]));
+    expect(centers.nw).toStrictEqual({ x: 10, y: 20 });
+    expect(centers.n).toStrictEqual({ x: 25, y: 20 });
+    expect(centers.ne).toStrictEqual({ x: 40, y: 20 });
+    expect(centers.e).toStrictEqual({ x: 40, y: 40 });
+    expect(centers.se).toStrictEqual({ x: 40, y: 60 });
+    expect(centers.s).toStrictEqual({ x: 25, y: 60 });
+    expect(centers.sw).toStrictEqual({ x: 10, y: 60 });
+    expect(centers.w).toStrictEqual({ x: 10, y: 40 });
+  });
+
+  test('shrinks handle size as zoom increases, to keep on-screen size constant', () => {
+    view.zoom = 2;
+    const rects = view.getHandleRects({ x: 0, y: 0, w: 10, h: 10 });
+
+    expect(rects[0].w).toBe(4); // HANDLE_SIZE(8) / zoom(2)
+    expect(rects[0].h).toBe(4);
   });
 });
 

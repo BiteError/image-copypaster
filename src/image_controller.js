@@ -1,3 +1,17 @@
+// Handle name -> which axes it drives, and which side of the anchor it starts on
+// (-1/+1). Used to detect when a drag has crossed past the anchor (the opposite,
+// fixed corner/edge), which means the floating layer should mirror through.
+const HANDLE_GEOMETRY = {
+    nw: { hasH: true, signH: -1, hasV: true, signV: -1 },
+    n: { hasH: false, hasV: true, signV: -1 },
+    ne: { hasH: true, signH: 1, hasV: true, signV: -1 },
+    e: { hasH: true, signH: 1, hasV: false },
+    se: { hasH: true, signH: 1, hasV: true, signV: 1 },
+    s: { hasH: false, hasV: true, signV: 1 },
+    sw: { hasH: true, signH: -1, hasV: true, signV: 1 },
+    w: { hasH: true, signH: -1, hasV: false },
+};
+
 /**
  * CONTROLLER: Orchestrates View and Model
  */
@@ -7,13 +21,30 @@ export default class ImageController {
         this.view = view;
         this.isSelecting = false;
         this.startPos = { x: 0, y: 0 };
+        this.floatingDrag = null; // {mode: 'move'|'resize', ...} while dragging a floating layer
 
         this.initListeners();
         this.view.setShapeMode(this.model.shapeMode);
     }
 
     render_view(){
-        this.view.render(this.model.mainImage, this.model.selection);
+        this.view.render(this.model.mainImage, this.model.selection, this.getFloatingRenderInfo());
+    }
+
+    getFloatingRenderInfo() {
+        if (!this.model.hasFloatingLayer()) return null;
+        const { x, y, w, h } = this.model.floatingLayer;
+        return {
+            x, y, w, h,
+            shape: this.model.selection ? this.model.selection.type : 'rect',
+            bitmap: this.model.getFloatingLayerPreview(),
+        };
+    }
+
+    async commitFloating() {
+        if (!this.model.hasFloatingLayer()) return;
+        await this.model.commitFloatingLayer();
+        this.render_view();
     }
 
     initListeners() {
@@ -51,6 +82,10 @@ export default class ImageController {
         const blob = item.getAsFile();
         const buffer = await blob.arrayBuffer();
 
+        if (this.model.hasFloatingLayer()) {
+            await this.model.commitFloatingLayer();
+        }
+
         if (this.model.selection) {
             await this.model.pasteIntoSelection(buffer);
         } else {
@@ -59,7 +94,15 @@ export default class ImageController {
         this.render_view();
     }
 
-    handleCopy(e) {
+    async handleCopy(e) {
+        if (this.model.hasFloatingLayer()) {
+            // Copy must never read the floating layer's transformed pixels directly -
+            // commit first so it reads the same composited mainImage everything else sees.
+            e.preventDefault();
+            await this.commitFloating();
+            await this.model.updateCopyBlob();
+        }
+
         if (this.model.pendingCopyBlob) {
             const item = new ClipboardItem({ "image/png": this.model.pendingCopyBlob });
             navigator.clipboard.write([item]);
@@ -71,6 +114,13 @@ export default class ImageController {
         const key = e.key.toLowerCase();
         const ctrl = e.ctrlKey || e.metaKey;
         const shift = e.shiftKey;
+
+        // Suppress undo/redo while a floating layer is active - the history stack stays
+        // untouched until commit; back out of an uncommitted paste with Escape instead.
+        if (this.model.hasFloatingLayer() && ctrl && (key === 'z' || key === 'y')) {
+            e.preventDefault();
+            return;
+        }
 
         //Undo
         if (ctrl && key === 'z') {
@@ -93,6 +143,12 @@ export default class ImageController {
                 this.view.drawSelection(this.model.selection);
             }
         }
+        // Cancel the floating layer
+        else if (e.key === 'Escape' && this.model.hasFloatingLayer()) {
+            this.model.cancelFloatingLayer();
+            this.render_view();
+            this.closeHelpPanel();
+        }
         // Deselect
         else if (e.key === 'Escape') {
             this.isSelecting = false;
@@ -109,6 +165,22 @@ export default class ImageController {
         else if (e.key === '?') {
             e.preventDefault();
             this.toggleHelpPanel();
+        }
+        // Commit the floating layer
+        else if (e.key === 'Enter' && this.model.hasFloatingLayer()) {
+            e.preventDefault();
+            this.commitFloating();
+        }
+        // Nudge the floating layer
+        else if (this.model.hasFloatingLayer() && key.startsWith('arrow')) {
+            e.preventDefault();
+            const step = shift ? 10 : 1;
+            const fl = this.model.floatingLayer;
+            if (key === 'arrowup') fl.y -= step;
+            else if (key === 'arrowdown') fl.y += step;
+            else if (key === 'arrowleft') fl.x -= step;
+            else if (key === 'arrowright') fl.x += step;
+            this.render_view();
         }
         else if (this.model.selection) {
             let direction = null;
@@ -140,6 +212,9 @@ export default class ImageController {
     }
 
     async toggleShapeMode() {
+        if (this.model.hasFloatingLayer()) {
+            await this.commitFloating();
+        }
         this.model.shapeMode = this.model.shapeMode === 'ellipse' ? 'rect' : 'ellipse';
         if (this.model.selection) {
             this.model.selection = { ...this.model.selection, type: this.model.shapeMode };
@@ -159,8 +234,13 @@ export default class ImageController {
         };
     }
 
-    handleMouseDown(e) {
+    async handleMouseDown(e) {
         if(this.model.isEmpty()) return;
+
+        if (this.model.hasFloatingLayer()) {
+            await this.handleFloatingMouseDown(e);
+            return;
+        }
 
         if (!e.altKey){
             this.isSelecting = true;
@@ -179,9 +259,97 @@ export default class ImageController {
         this.view.setAlphaColor(this.model.alphaKey);
     }
 
+    async handleFloatingMouseDown(e) {
+        const coords = this.getCanvasCoords(e);
+        const handle = this.hitTestFloatingHandle(coords);
+        if (handle) {
+            this.floatingDrag = this.beginFloatingResize(handle);
+            return;
+        }
+        if (this.isInsideFloatingLayer(coords)) {
+            const fl = this.model.floatingLayer;
+            this.floatingDrag = { mode: 'move', start: coords, startX: fl.x, startY: fl.y };
+            return;
+        }
+        // Outside the floating box: commit it, then start a normal selection drag from here.
+        await this.commitFloating();
+        this.isSelecting = true;
+        this.startPos = coords;
+    }
+
+    hitTestFloatingHandle(coords) {
+        const { x, y, w, h } = this.model.floatingLayer;
+        const hit = this.view.getHandleRects({ x, y, w, h })
+            .find(r => coords.x >= r.x && coords.x < r.x + r.w && coords.y >= r.y && coords.y < r.y + r.h);
+        return hit ? hit.type : null;
+    }
+
+    isInsideFloatingLayer(coords) {
+        const { x, y, w, h } = this.model.floatingLayer;
+        return coords.x >= x && coords.x <= x + w && coords.y >= y && coords.y <= y + h;
+    }
+
+    beginFloatingResize(handle) {
+        const fl = this.model.floatingLayer;
+        const geo = HANDLE_GEOMETRY[handle];
+        return {
+            mode: 'resize',
+            geo,
+            anchor: {
+                x: geo.hasH ? (geo.signH === -1 ? fl.x + fl.w : fl.x) : fl.x,
+                y: geo.hasV ? (geo.signV === -1 ? fl.y + fl.h : fl.y) : fl.y,
+            },
+            startW: fl.w,
+            startH: fl.h,
+            startFlipH: fl.flipH,
+            startFlipV: fl.flipV,
+        };
+    }
+
+    applyFloatingResize(drag, coords, lockAspect) {
+        const fl = this.model.floatingLayer;
+        const { geo, anchor, startW, startH } = drag;
+
+        let w = geo.hasH ? Math.abs(coords.x - anchor.x) : startW;
+        let h = geo.hasV ? Math.abs(coords.y - anchor.y) : startH;
+
+        if (lockAspect && geo.hasH && geo.hasV && startW && startH) {
+            const ratio = startW / startH;
+            if (w / ratio >= h) h = w / ratio;
+            else w = h * ratio;
+        }
+
+        if (geo.hasH) {
+            const side = coords.x < anchor.x ? -1 : 1;
+            fl.flipH = drag.startFlipH !== (side !== geo.signH);
+            fl.w = w;
+            fl.x = side === -1 ? anchor.x - w : anchor.x;
+        }
+
+        if (geo.hasV) {
+            const side = coords.y < anchor.y ? -1 : 1;
+            fl.flipV = drag.startFlipV !== (side !== geo.signV);
+            fl.h = h;
+            fl.y = side === -1 ? anchor.y - h : anchor.y;
+        }
+    }
+
     handleMouseMove(e) {
+        if (this.floatingDrag) {
+            const coords = this.getCanvasCoords(e);
+            const fl = this.model.floatingLayer;
+            if (this.floatingDrag.mode === 'move') {
+                fl.x = this.floatingDrag.startX + (coords.x - this.floatingDrag.start.x);
+                fl.y = this.floatingDrag.startY + (coords.y - this.floatingDrag.start.y);
+            } else {
+                this.applyFloatingResize(this.floatingDrag, coords, e.shiftKey);
+            }
+            this.render_view();
+            return;
+        }
+
         if (!this.isSelecting) return;
-        
+
         const current = this.getCanvasCoords(e);
         this.model.selection = {
             type: this.model.shapeMode,
@@ -194,6 +362,11 @@ export default class ImageController {
     }
 
     async handleMouseUp() {
+        if (this.floatingDrag) {
+            this.floatingDrag = null;
+            return;
+        }
+
         if (!this.isSelecting) return;
         this.isSelecting = false;
         if (this.model.selection && (this.model.selection.w === 0 || this.model.selection.h === 0)) {

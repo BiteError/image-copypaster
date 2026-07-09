@@ -24,11 +24,13 @@ function stubCanvasContext() {
     putImageData: vi.fn(),
     clearRect: vi.fn(),
     strokeRect: vi.fn(),
+    fillRect: vi.fn(),
     setLineDash: vi.fn(),
     beginPath: vi.fn(),
     ellipse: vi.fn(),
     stroke: vi.fn(),
     strokeStyle: null,
+    fillStyle: null,
     lineWidth: null,
   };
 }

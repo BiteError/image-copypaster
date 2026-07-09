@@ -22,10 +22,15 @@ export default class ImageModel {
         this.alphaKey = null; // {r, g, b}
         this.colorTolerance = 10; // 0-100, how close a color must be to alphaKey to match
         this.pendingCopyBlob = null;
+        this.floatingLayer = null; // {original, x, y, w, h, rotation, flipH, flipV}
     }
 
     isEmpty() {
         return this.mainImage.isEmpty();
+    }
+
+    hasFloatingLayer() {
+        return !!this.floatingLayer;
     }
 
     notEmpty() {
@@ -70,19 +75,52 @@ export default class ImageModel {
     async pasteIntoSelection(buffer) {
         if (this.isEmpty() || !this.selection) return;
         const pasted = await CreateBitmap(buffer);
-        
+
         if (this.alphaKey) {
             pasted.make_color_transparent(this.alphaKey, toleranceToDistance(this.colorTolerance));
         }
 
-        pasted.resize(this.selection.w, this.selection.h);
-        if (this.selection.type === 'ellipse') pasted.mask_ellipse();
-        this.mainImage.composite(pasted, this.selection.x, this.selection.y);
-        await this.saveHistory();
+        this.floatingLayer = {
+            original: pasted,
+            x: this.selection.x,
+            y: this.selection.y,
+            w: this.selection.w,
+            h: this.selection.h,
+            rotation: 0,
+            flipH: false,
+            flipV: false,
+        };
+    }
+
+    // Derives a fresh transformed copy from the floating layer's untouched original
+    // bitmap every call, so repeated rotate/flip/resize while floating never compounds
+    // lossy transforms onto a previously-transformed copy.
+    getFloatingLayerPreview() {
+        if (!this.floatingLayer) return null;
+        const { original, w, h, rotation, flipH, flipV } = this.floatingLayer;
+        const bmp = original.clone();
+
+        const turns = ((rotation / 90) % 4 + 4) % 4;
+        for (let i = 0; i < turns; i++) bmp.rotate_cw();
+
+        if (flipH) bmp.flip_horizontal();
+        if (flipV) bmp.flip_vertical();
+
+        bmp.resize(w, h);
+
+        if (this.selection && this.selection.type === 'ellipse') bmp.mask_ellipse();
+
+        return bmp;
     }
 
     async manipulateSelection(type) {
         if (this.isEmpty() || !this.selection) return;
+
+        if (this.hasFloatingLayer()) {
+            this.applyFloatingTransform(type);
+            return;
+        }
+
         const { x, y, w, h } = this.selection;
         let part = this.mainImage.clone().crop(x, y, w, h);
 
@@ -95,6 +133,41 @@ export default class ImageModel {
 
         this.mainImage.composite(part, x, y);
         await this.saveHistory();
+    }
+
+    // Updates the floating layer's transform params only - getFloatingLayerPreview()
+    // re-derives from the untouched original bitmap every render, so this never
+    // compounds lossy transforms the way the destructive path above would.
+    applyFloatingTransform(type) {
+        const fl = this.floatingLayer;
+        if (type === 'rotateCW') fl.rotation = (fl.rotation + 90) % 360;
+        else if (type === 'rotateCCW') fl.rotation = (fl.rotation + 270) % 360;
+        else if (type === 'flipH') fl.flipH = !fl.flipH;
+        else if (type === 'flipV') fl.flipV = !fl.flipV;
+    }
+
+    // Bakes the floating layer's current transform (and ellipse mask, if applicable) into
+    // mainImage, then clears it. this.selection is updated to the floating layer's final
+    // bounds so subsequent copy/manipulate operate on the region the content landed in.
+    async commitFloatingLayer() {
+        if (!this.floatingLayer) return;
+        const transformed = this.getFloatingLayerPreview();
+        this.mainImage.composite(transformed, this.floatingLayer.x, this.floatingLayer.y);
+        this.selection = {
+            type: this.selection ? this.selection.type : 'rect',
+            x: this.floatingLayer.x,
+            y: this.floatingLayer.y,
+            w: this.floatingLayer.w,
+            h: this.floatingLayer.h,
+        };
+        this.floatingLayer = null;
+        await this.saveHistory();
+    }
+
+    // Discards the floating layer entirely - mainImage was never touched by it, so there's
+    // nothing to restore and no history entry to create.
+    cancelFloatingLayer() {
+        this.floatingLayer = null;
     }
 
     async updateCopyBlob() {

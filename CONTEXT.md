@@ -17,8 +17,24 @@ Whether a Selection is rectangular or elliptical. Toggled via the Space shortcut
 _Avoid_: shape mode, selection type
 
 **Paste**:
-Insert an image from the system clipboard. With no Selection, the pasted image becomes the Canvas; with an active Selection, the pasted image is resized to fit and composited into it.
+Insert an image from the system clipboard. With no Selection, the pasted image becomes the Canvas immediately. With an active Selection, the pasted image becomes a Floating Layer sized to the Selection's bounds, pending a Commit — it is no longer baked into the Canvas until then.
 _Avoid_: import, insert
+
+**Floating Layer**:
+A non-destructive, uncommitted image produced by a Paste into an active Selection. Holds its original bitmap untouched alongside position, size, rotation, and flip transform parameters; every render re-derives the displayed pixels from the original bitmap rather than baking transforms in, so repeated adjustment never compounds quality loss. Shares the Selection's Shape for masking and outline. Only one can exist at a time — it must Commit or Cancel before another Paste can start.
+_Avoid_: preview layer, pending paste, staged image
+
+**Handle**:
+One of eight small squares (four corners, four edge midpoints) rendered around a Floating Layer's bounding box, used to resize it by dragging. Corner Handles resize both axes; edge Handles resize a single axis. Holding Shift while dragging a Handle locks the Floating Layer's original aspect ratio. Dragging a Handle past the opposite Handle is allowed and flips the Floating Layer through.
+_Avoid_: grip, anchor
+
+**Commit**:
+Bake a Floating Layer's current transform into the Canvas at its current position/size, then clear the Floating Layer — the same composite-and-save-history path a destructive Paste used to follow directly. Triggered by Enter, clicking outside the Floating Layer, starting a new Selection or Paste elsewhere, switching Shape, or Copy (which always commits first so it reads the same composited pixels everything else sees).
+_Avoid_: apply, finalize, bake
+
+**Cancel**:
+Discard a Floating Layer entirely via Escape, reverting to whatever was on the Canvas before the Paste that created it. Since the Canvas was never touched, no history entry is created.
+_Avoid_: discard, revert, undo
 
 **Copy**:
 Extract the current Selection's pixels and place them on the system clipboard as a PNG.
