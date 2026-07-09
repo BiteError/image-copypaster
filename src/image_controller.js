@@ -15,7 +15,7 @@ export default class ImageController {
     }
 
     render_view(){
-        this.view.render(this.model.mainImage, this.model.selection);
+        this.view.render(this.model.mainImage, this.model.selection, this.model.alphaKey, this.model.colorTolerance);
     }
 
     async commitFloating() {
@@ -216,25 +216,42 @@ export default class ImageController {
 
         if(this.model.isEmpty()) return;
 
+        // Alt-click samples/clears the Alpha Key. Carved out ahead of the floating-layer
+        // early return below so sampling stays reachable while a Floating Layer is active.
+        if (e.altKey) {
+            this.handleAltClick(e);
+            return;
+        }
+
         if (this.model.hasFloatingLayer()) {
             await this.handleSelectionMouseDown(e);
             return;
         }
 
-        if (!e.altKey){
-            if (this.model.selection) {
-                await this.handleSelectionMouseDown(e);
-                return;
-            }
-            this.isSelecting = true;
-            this.startPos = this.getCanvasCoords(e);
+        if (this.model.selection) {
+            await this.handleSelectionMouseDown(e);
+            return;
+        }
+        this.isSelecting = true;
+        this.startPos = this.getCanvasCoords(e);
+    }
+
+    // Shift+alt+click always clears the Alpha Key. Plain alt+click samples it: from the
+    // Floating Layer's live preview when the click lands inside its bounds, otherwise from
+    // mainImage - same source used when there's no Floating Layer at all.
+    handleAltClick(e) {
+        if (e.shiftKey) {
+            this.model.alphaKey = null;
+            this.view.setAlphaColor(this.model.alphaKey);
             return;
         }
 
-        if (e.shiftKey) {
-            this.model.alphaKey = null;
+        const coords = this.getCanvasCoords(e);
+        const sel = this.model.selection;
+        if (this.model.hasFloatingLayer() && sel.contains(coords)) {
+            const preview = sel.preview(this.model.alphaKey, this.model.colorTolerance);
+            this.model.alphaKey = preview.pixel_color(coords.x - sel.x, coords.y - sel.y);
         } else {
-            const coords = this.getCanvasCoords(e);
             this.model.alphaKey = this.model.mainImage.pixel_color(coords.x, coords.y);
         }
         this.view.setAlphaColor(this.model.alphaKey);
@@ -321,5 +338,8 @@ export default class ImageController {
 
     handleToleranceChange(e) {
         this.model.colorTolerance = Number(e.target.value);
+        if (this.model.hasFloatingLayer()) {
+            this.render_view();
+        }
     }
 }

@@ -580,6 +580,51 @@ describe('handleMouseDown', () => {
 
     expect(model.alphaKey).toStrictEqual(BLACK);
   });
+
+  describe('while a floating layer is active', () => {
+    async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
+      await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+      model.selection = new Selection({ type: 'rect', x, y, w, h });
+      await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK, { r: 9, g: 9, b: 9 }));
+    }
+
+    test('alt+click inside the bounds samples from the floating layer\'s preview, not mainImage', async () => {
+      await setupFloatingLayer(20, 20, 40, 40); // corner pixel of the pasted patch is {9,9,9}
+
+      dispatchMouseDown({ clientX: 20, clientY: 20, altKey: true });
+
+      expect(model.alphaKey).toStrictEqual({ r: 9, g: 9, b: 9 });
+      expect(fakeView.setAlphaColor).toHaveBeenCalledWith({ r: 9, g: 9, b: 9 });
+    });
+
+    test('alt+click outside the bounds samples from mainImage, unchanged', async () => {
+      await setupFloatingLayer(20, 20, 40, 40);
+
+      dispatchMouseDown({ clientX: 90, clientY: 90, altKey: true }); // outside the floating layer, on WHITE background
+
+      expect(model.alphaKey).toStrictEqual(WHITE);
+    });
+
+    test('alt+click does not begin a resize/move gesture', async () => {
+      await setupFloatingLayer(20, 20, 40, 40);
+      const beginMoveSpy = vi.spyOn(model.selection, 'beginMove');
+
+      dispatchMouseDown({ clientX: 40, clientY: 40, altKey: true }); // inside the box, would hit "move" without altKey
+
+      expect(beginMoveSpy).not.toHaveBeenCalled();
+      expect(controller.selectionDrag).toBeFalsy();
+    });
+
+    test('alt+shift+click still clears alphaKey while floating', async () => {
+      await setupFloatingLayer(20, 20, 40, 40);
+      model.alphaKey = BLACK;
+
+      dispatchMouseDown({ clientX: 40, clientY: 40, altKey: true, shiftKey: true });
+
+      expect(model.alphaKey).toBeNull();
+      expect(fakeView.setAlphaColor).toHaveBeenCalledWith(null);
+    });
+  });
 });
 
 describe('handleMouseMove', () => {
@@ -901,5 +946,26 @@ describe('handleToleranceChange / tolerance-slider', () => {
     slider.dispatchEvent(new Event('input', { bubbles: true }));
 
     expect(model.colorTolerance).toBe(42);
+  });
+
+  test('does not re-render when there is no floating layer', () => {
+    const slider = document.getElementById('tolerance-slider');
+    slider.value = '42';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(fakeView.render).not.toHaveBeenCalled();
+  });
+
+  test('re-renders live when a floating layer is active', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
+    await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
+    const slider = document.getElementById('tolerance-slider');
+    slider.value = '42';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, 42);
   });
 });

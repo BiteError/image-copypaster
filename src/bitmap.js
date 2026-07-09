@@ -1,5 +1,13 @@
 import { Jimp } from 'jimp'
 
+// Largest possible Euclidean RGB distance (black vs. white), used to map the
+// 0-100 tolerance slider onto make_color_transparent's raw distance argument.
+const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255);
+
+export function toleranceToDistance(tolerancePercent) {
+    return (tolerancePercent / 100) * MAX_RGB_DISTANCE;
+}
+
 export async function CreateBitmap(blob) {
    const jimpImage = await Jimp.read(blob);
    return new JimpBitmap(jimpImage);

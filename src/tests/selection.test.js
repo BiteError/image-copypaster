@@ -205,6 +205,40 @@ describe('preview', () => {
 
     expect(first).toStrictEqual(second);
   });
+
+  test('with no alphaKey, leaves pixels opaque', async () => {
+    const sel = await makeFloating(0, 0, 20, 20);
+
+    expect(sel.preview().data()[3]).toBe(255);
+  });
+
+  test('strips pixels matching the given alphaKey, without mutating the original', async () => {
+    const sel = await makeFloating(0, 0, 20, 20); // solid BLACK
+
+    const data = sel.preview(BLACK, 0).data();
+
+    expect(data[3]).toBe(0);
+    expect(sel.original.data()[3]).toBe(255); // original stays untouched
+  });
+
+  test('strips near-matching pixels when colorTolerance allows it', async () => {
+    const original = await create_solid_bitmap(20, 20, { r: 50, g: 50, b: 50 }); // close to black, not exact
+    const sel = makeMarquee(0, 0, 20, 20);
+    sel.enterTransientFloating(original);
+
+    expect(sel.preview(BLACK, 100).data()[3]).toBe(0); // widest tolerance strips it
+    expect(sel.preview(BLACK, 0).data()[3]).toBe(255); // zero tolerance keeps exact-match-only behavior
+  });
+
+  test('applies the color key before rotate/flip/resize, at native resolution', async () => {
+    const sel = await makeFloating(0, 0, 10, 10); // solid BLACK
+    sel.w = 100;
+    sel.h = 100;
+
+    const data = sel.preview(BLACK, 0).data();
+
+    expect(data[3]).toBe(0); // still keyed after resizing up
+  });
 });
 
 describe('resize gestures (beginResize/applyDrag)', () => {

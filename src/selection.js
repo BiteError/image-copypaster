@@ -1,3 +1,5 @@
+import { toleranceToDistance } from './bitmap.js'
+
 // Handle name -> which axes it drives, and which side of the anchor it starts on
 // (-1/+1). Used to detect when a drag has crossed past the anchor (the opposite,
 // fixed corner/edge), which means the selection should mirror through.
@@ -171,10 +173,13 @@ export default class Selection {
     }
 
     // Derives a fresh transformed copy from the untouched original bitmap every call,
-    // so repeated rotate/flip/resize while floating never compounds lossy transforms
-    // onto a previously-transformed copy.
-    preview() {
+    // so repeated rotate/flip/resize/re-keying while floating never compounds lossy
+    // transforms onto a previously-transformed copy. Color-keying happens first, at
+    // native resolution, so tolerance matching isn't skewed by resize interpolation.
+    preview(alphaKey = null, colorTolerance = 0) {
         const bmp = this.original.clone();
+
+        if (alphaKey) bmp.make_color_transparent(alphaKey, toleranceToDistance(colorTolerance));
 
         const turns = ((this.rotation / 90) % 4 + 4) % 4;
         for (let i = 0; i < turns; i++) bmp.rotate_cw();

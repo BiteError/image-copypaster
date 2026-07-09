@@ -145,7 +145,7 @@ test('pasteIntoSelection with an ellipse selection turns it floating, sized to t
   expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
 });
 
-test('pasteIntoSelection strips pixels matching the alpha key from the floating bitmap', async () => {
+test('pasteIntoSelection leaves the floating bitmap untouched by the alpha key - keying is deferred to preview()', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
   model.selection = new Selection({ x: 50, y: 50, w: 100, h: 100 });
@@ -153,36 +153,23 @@ test('pasteIntoSelection strips pixels matching the alpha key from the floating 
 
   await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK)); // matches alpha key
 
-  // the whole pasted patch matched the alpha key, so it's transparent before it ever floats
   const data = model.selection.original.data();
-  expect(data[3]).toBe(0);
+  expect(data[3]).toBe(255);
 });
 
-test('pasteIntoSelection strips near-matching pixels when colorTolerance allows it', async () => {
+test('commitFloatingLayer bakes the model\'s live alphaKey/colorTolerance into mainImage', async () => {
   const model = new ImageModel();
   await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = new Selection({ x: 50, y: 50, w: 10, h: 10 });
-  model.alphaKey = BLACK;
-  model.colorTolerance = 100; // widest possible tolerance
+  model.selection = new Selection({ x: 50, y: 50, w: 100, h: 100 });
+  await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
 
-  await model.pasteIntoSelection(await create_solid_png_buffer(10, 10, { r: 50, g: 50, b: 50 })); // close to black, not exact
-
-  const data = model.selection.original.data();
-  expect(data[3]).toBe(0); // stripped to transparent
-});
-
-test('pasteIntoSelection with colorTolerance 0 keeps today\'s exact-match-only behavior', async () => {
-  const model = new ImageModel();
-  await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = new Selection({ x: 50, y: 50, w: 10, h: 10 });
+  // set the key only after paste, proving it's read live at commit time, not snapshotted at paste time
   model.alphaKey = BLACK;
   model.colorTolerance = 0;
+  await model.commitFloatingLayer();
 
-  await model.pasteIntoSelection(await create_solid_png_buffer(10, 10, { r: 50, g: 50, b: 50 })); // close to black, not exact
-
-  expect(model.selection.original.pixel_color(0, 0)).toStrictEqual({ r: 50, g: 50, b: 50 }); // not stripped
-  const data = model.selection.original.data();
-  expect(data[3]).toBe(255); // still opaque
+  // keyed-out pixels are fully transparent, so compositing them leaves the white background showing through
+  expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
 });
 
 test('toleranceToDistance maps the 0-100 slider onto the max RGB distance', () => {

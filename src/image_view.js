@@ -25,7 +25,6 @@ export default class ImageView {
         this.transparencyToggle = document.getElementById('transparency-toggle');
         this.transparencyToggle.checked = false;
         this.toleranceSlider = document.getElementById('tolerance-slider');
-        this.toleranceSlider.disabled = true;
 
         this.shapeToggle = document.getElementById('shape-toggle-btn');
     }
@@ -36,7 +35,7 @@ export default class ImageView {
         this.resize(300, 150);
     }
 
-    render(bitmap, selection) {
+    render(bitmap, selection, alphaKey, colorTolerance) {
         if (!bitmap) return;
         const width = bitmap.width;
         const height = bitmap.height;
@@ -56,7 +55,7 @@ export default class ImageView {
         // to catch its own handle/drag interactions instead.
         this.uiCanvas.style.pointerEvents = selection ? 'auto' : 'none';
 
-        this.drawSelection(selection);
+        this.drawSelection(selection, alphaKey, colorTolerance);
     }
 
     toImageData(bitmap) {
@@ -76,13 +75,13 @@ export default class ImageView {
         this.uiCanvas.style.height = (height * this.zoom) + 'px';
     }
 
-    drawSelection(sel) {
+    drawSelection(sel, alphaKey, colorTolerance) {
         this.uiCtx.clearRect(0, 0, this.uiCanvas.width, this.uiCanvas.height);
 
         if (!sel) return;
 
         if (sel.isFloating) {
-            const bitmap = sel.preview();
+            const bitmap = sel.preview(alphaKey, colorTolerance);
             this.uiCtx.putImageData(this.toImageData(bitmap), sel.x, sel.y);
             this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, FLOATING_LAYER_COLOR);
         } else {
@@ -147,6 +146,5 @@ export default class ImageView {
 
         this.alphaColor.style.background = newColor;
         this.transparencyToggle.checked = !!color;
-        this.toleranceSlider.disabled = !color;
     }
 }

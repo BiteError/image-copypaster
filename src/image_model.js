@@ -2,13 +2,7 @@ import { CreateBitmap } from './bitmap.js'
 import { CreateEmptyBitmap } from './bitmap.js'
 import Selection from './selection.js'
 
-// Largest possible Euclidean RGB distance (black vs. white), used to map the
-// 0-100 tolerance slider onto make_color_transparent's raw distance argument.
-const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255);
-
-export function toleranceToDistance(tolerancePercent) {
-    return (tolerancePercent / 100) * MAX_RGB_DISTANCE;
-}
+export { toleranceToDistance } from './bitmap.js'
 
 /**
  * MODEL: State management and byte-level manipulation via Jimp
@@ -74,11 +68,6 @@ export default class ImageModel {
     async pasteIntoSelection(buffer) {
         if (this.isEmpty() || !this.selection) return;
         const pasted = await CreateBitmap(buffer);
-
-        if (this.alphaKey) {
-            pasted.make_color_transparent(this.alphaKey, toleranceToDistance(this.colorTolerance));
-        }
-
         this.selection.enterFloating(pasted);
     }
 
@@ -135,7 +124,7 @@ export default class ImageModel {
     // subsequent copy/manipulate operate on the region the content landed in.
     async commitFloatingLayer() {
         if (!this.hasFloatingLayer()) return;
-        const transformed = this.selection.preview();
+        const transformed = this.selection.preview(this.alphaKey, this.colorTolerance);
         const { x, y, w, h } = this.selection.bounds();
         this.mainImage.composite(transformed, x, y);
         this.selection.exitFloating();

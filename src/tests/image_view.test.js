@@ -121,7 +121,7 @@ describe('render', () => {
 
     view.render(bitmap, selection);
 
-    expect(drawSelectionSpy).toHaveBeenCalledWith(selection);
+    expect(drawSelectionSpy).toHaveBeenCalledWith(selection, undefined, undefined);
   });
 
   test('calls through to drawSelection with a floating selection', async () => {
@@ -132,7 +132,19 @@ describe('render', () => {
 
     view.render(bitmap, floating);
 
-    expect(drawSelectionSpy).toHaveBeenCalledWith(floating);
+    expect(drawSelectionSpy).toHaveBeenCalledWith(floating, undefined, undefined);
+  });
+
+  test('forwards alphaKey/colorTolerance through to drawSelection', async () => {
+    stubWindowSize(2000, 2000);
+    const bitmap = await create_test_bitmap();
+    const drawSelectionSpy = vi.spyOn(view, 'drawSelection');
+    const floating = await makeFloating(1, 2, 3, 4);
+    const alphaKey = { r: 1, g: 2, b: 3 };
+
+    view.render(bitmap, floating, alphaKey, 42);
+
+    expect(drawSelectionSpy).toHaveBeenCalledWith(floating, alphaKey, 42);
   });
 
   test('draws the bitmap pixel data via putImageData', async () => {
@@ -269,6 +281,16 @@ describe('drawSelection', () => {
       expect(uiCtx.strokeRect).toHaveBeenCalledWith(5, 6, 40, 40);
     });
 
+    test('forwards alphaKey/colorTolerance into preview()', async () => {
+      const floating = await makeFloating(5, 6, 40, 40);
+      const previewSpy = vi.spyOn(floating, 'preview');
+      const alphaKey = { r: 1, g: 2, b: 3 };
+
+      view.drawSelection(floating, alphaKey, 42);
+
+      expect(previewSpy).toHaveBeenCalledWith(alphaKey, 42);
+    });
+
     test('outlines with an ellipse when the floating shape is ellipse', async () => {
       const floating = await makeFloating(0, 0, 30, 40, 'ellipse');
 
@@ -358,18 +380,12 @@ describe('setAlphaColor', () => {
     expect(view.transparencyToggle.checked).toBe(false);
   });
 
-  test('enables the tolerance slider when a color is given', () => {
+  test('leaves the tolerance slider enabled regardless of color', () => {
     view.setAlphaColor({ r: 10, g: 20, b: 30 });
-
     expect(view.toleranceSlider.disabled).toBe(false);
-  });
-
-  test('disables the tolerance slider when color is null', () => {
-    view.setAlphaColor({ r: 10, g: 20, b: 30 });
 
     view.setAlphaColor(null);
-
-    expect(view.toleranceSlider.disabled).toBe(true);
+    expect(view.toleranceSlider.disabled).toBe(false);
   });
 });
 
