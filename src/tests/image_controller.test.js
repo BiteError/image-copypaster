@@ -37,7 +37,11 @@ function makeFakeView() {
     imgCanvas: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
     zoom: 1,
   };
-  view.getHandleRects = vi.fn(bounds => fakeGetHandleRects(bounds, view.zoom));
+  view.hitTestHandle = vi.fn((bounds, coords) => {
+    const hit = fakeGetHandleRects(bounds, view.zoom)
+      .find(r => coords.x >= r.x && coords.x < r.x + r.w && coords.y >= r.y && coords.y < r.y + r.h);
+    return hit ? hit.type : null;
+  });
   return view;
 }
 
@@ -635,7 +639,7 @@ describe('handleMouseUp', () => {
   });
 });
 
-describe('floating layer move & resize', () => {
+describe('floating layer move & resize (routing)', () => {
   function dispatchMouseDown(opts = {}) {
     window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
   }
@@ -652,67 +656,49 @@ describe('floating layer move & resize', () => {
     await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
   }
 
-  test('dragging inside the box (not on a handle) moves it', async () => {
+  // The exact resize/flip-through/aspect-lock geometry is covered directly against
+  // FloatingLayer in floating_layer.test.js; these assert the controller wires mouse
+  // events to the right model.* delegator, not the resulting numbers.
+
+  test('mousedown on a handle begins a resize gesture on the model', async () => {
+    await setupFloatingLayer(); // box: x20 y20 w40 h40 -> se handle at (60,60)
+    const beginResizeSpy = vi.spyOn(model.floatingLayer, 'beginResize');
+
+    dispatchMouseDown({ clientX: 60, clientY: 60 });
+
+    expect(beginResizeSpy).toHaveBeenCalledWith('se');
+    expect(controller.floatingDrag).toBeTruthy();
+  });
+
+  test('mousedown inside the box (not on a handle) begins a move gesture on the model', async () => {
     await setupFloatingLayer();
+    const beginMoveSpy = vi.spyOn(model.floatingLayer, 'beginMove');
 
     dispatchMouseDown({ clientX: 40, clientY: 40 }); // center, well clear of any handle
-    dispatchMouseMove({ clientX: 50, clientY: 55 });
 
-    expect(model.floatingLayer).toMatchObject({ x: 30, y: 35, w: 40, h: 40 });
-    expect(fakeView.render).toHaveBeenCalled();
+    expect(beginMoveSpy).toHaveBeenCalledWith({ x: 40, y: 40 });
+    expect(controller.floatingDrag).toBeTruthy();
   });
 
-  test('dragging a corner handle resizes both axes', async () => {
-    await setupFloatingLayer(); // box: x20 y20 w40 h40 -> se handle at (60,60)
-
-    dispatchMouseDown({ clientX: 60, clientY: 60 });
-    dispatchMouseMove({ clientX: 80, clientY: 70 });
-
-    expect(model.floatingLayer).toMatchObject({ x: 20, y: 20, w: 60, h: 50 });
-  });
-
-  test('dragging an edge handle resizes only its single axis', async () => {
-    await setupFloatingLayer(); // e handle at (60,40)
-
-    dispatchMouseDown({ clientX: 60, clientY: 40 });
-    dispatchMouseMove({ clientX: 90, clientY: 999 }); // y ignored: e handle is horizontal-only
-
-    expect(model.floatingLayer).toMatchObject({ x: 20, y: 20, w: 70, h: 40 });
-  });
-
-  test('Shift locks the aspect ratio while resizing from a corner', async () => {
-    await setupFloatingLayer(); // square 40x40, se handle at (60,60)
-
-    dispatchMouseDown({ clientX: 60, clientY: 60 });
-    dispatchMouseMove({ clientX: 100, clientY: 40, shiftKey: true }); // raw would be 80x20
-
-    expect(model.floatingLayer).toMatchObject({ x: 20, y: 20, w: 80, h: 80 });
-  });
-
-  test('resize is unconstrained without Shift', async () => {
+  test('mousemove while dragging forwards coords and shiftKey to model.applyFloatingDrag', async () => {
     await setupFloatingLayer();
+    dispatchMouseDown({ clientX: 40, clientY: 40 });
+    const applyDragSpy = vi.spyOn(model.floatingLayer, 'applyDrag');
 
-    dispatchMouseDown({ clientX: 60, clientY: 60 });
-    dispatchMouseMove({ clientX: 100, clientY: 40 });
+    dispatchMouseMove({ clientX: 50, clientY: 55, shiftKey: true });
 
-    expect(model.floatingLayer).toMatchObject({ x: 20, y: 20, w: 80, h: 20 });
-  });
-
-  test('dragging a corner past the opposite corner flips through without erroring or zero size', async () => {
-    await setupFloatingLayer(); // box x20 y20 w40 h40, nw handle at (20,20), anchor (se) at (60,60)
-
-    dispatchMouseDown({ clientX: 20, clientY: 20 });
-    expect(() => dispatchMouseMove({ clientX: 80, clientY: 80 })).not.toThrow();
-
-    expect(model.floatingLayer).toMatchObject({ x: 60, y: 60, w: 20, h: 20, flipH: true, flipV: true });
+    expect(applyDragSpy).toHaveBeenCalledWith({ x: 50, y: 55 }, true);
+    expect(fakeView.render).toHaveBeenCalled();
   });
 
   test('mouseup ends the drag', async () => {
     await setupFloatingLayer();
     dispatchMouseDown({ clientX: 40, clientY: 40 });
+    const endDragSpy = vi.spyOn(model.floatingLayer, 'endDrag');
 
     dispatchMouseUp();
 
+    expect(endDragSpy).toHaveBeenCalled();
     expect(controller.floatingDrag).toBeNull();
   });
 

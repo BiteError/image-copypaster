@@ -1,17 +1,3 @@
-// Handle name -> which axes it drives, and which side of the anchor it starts on
-// (-1/+1). Used to detect when a drag has crossed past the anchor (the opposite,
-// fixed corner/edge), which means the floating layer should mirror through.
-const HANDLE_GEOMETRY = {
-    nw: { hasH: true, signH: -1, hasV: true, signV: -1 },
-    n: { hasH: false, hasV: true, signV: -1 },
-    ne: { hasH: true, signH: 1, hasV: true, signV: -1 },
-    e: { hasH: true, signH: 1, hasV: false },
-    se: { hasH: true, signH: 1, hasV: true, signV: 1 },
-    s: { hasH: false, hasV: true, signV: 1 },
-    sw: { hasH: true, signH: -1, hasV: true, signV: 1 },
-    w: { hasH: true, signH: -1, hasV: false },
-};
-
 /**
  * CONTROLLER: Orchestrates View and Model
  */
@@ -21,7 +7,7 @@ export default class ImageController {
         this.view = view;
         this.isSelecting = false;
         this.startPos = { x: 0, y: 0 };
-        this.floatingDrag = null; // {mode: 'move'|'resize', ...} while dragging a floating layer
+        this.floatingDrag = null; // truthy while dragging a floating layer's move/resize gesture
 
         this.initListeners();
         this.view.setShapeMode(this.model.shapeMode);
@@ -33,10 +19,10 @@ export default class ImageController {
 
     getFloatingRenderInfo() {
         if (!this.model.hasFloatingLayer()) return null;
-        const { x, y, w, h } = this.model.floatingLayer;
+        const { x, y, w, h } = this.model.floatingBounds();
         return {
             x, y, w, h,
-            shape: this.model.selection ? this.model.selection.type : 'rect',
+            shape: this.model.floatingShape(),
             bitmap: this.model.getFloatingLayerPreview(),
         };
     }
@@ -175,11 +161,8 @@ export default class ImageController {
         else if (this.model.hasFloatingLayer() && key.startsWith('arrow')) {
             e.preventDefault();
             const step = shift ? 10 : 1;
-            const fl = this.model.floatingLayer;
-            if (key === 'arrowup') fl.y -= step;
-            else if (key === 'arrowdown') fl.y += step;
-            else if (key === 'arrowleft') fl.x -= step;
-            else if (key === 'arrowright') fl.x += step;
+            const dir = key.slice('arrow'.length); // 'arrowup' -> 'up'
+            this.model.nudgeFloating(dir, step);
             this.render_view();
         }
         else if (this.model.selection) {
@@ -259,14 +242,15 @@ export default class ImageController {
 
     async handleFloatingMouseDown(e) {
         const coords = this.getCanvasCoords(e);
-        const handle = this.hitTestFloatingHandle(coords);
+        const handle = this.view.hitTestHandle(this.model.floatingBounds(), coords);
         if (handle) {
-            this.floatingDrag = this.beginFloatingResize(handle);
+            this.model.beginFloatingResize(handle);
+            this.floatingDrag = true;
             return;
         }
-        if (this.isInsideFloatingLayer(coords)) {
-            const fl = this.model.floatingLayer;
-            this.floatingDrag = { mode: 'move', start: coords, startX: fl.x, startY: fl.y };
+        if (this.model.floatingContains(coords)) {
+            this.model.beginFloatingMove(coords);
+            this.floatingDrag = true;
             return;
         }
         // Outside the floating box: commit it, then start a normal selection drag from here.
@@ -275,73 +259,10 @@ export default class ImageController {
         this.startPos = coords;
     }
 
-    hitTestFloatingHandle(coords) {
-        const { x, y, w, h } = this.model.floatingLayer;
-        const hit = this.view.getHandleRects({ x, y, w, h })
-            .find(r => coords.x >= r.x && coords.x < r.x + r.w && coords.y >= r.y && coords.y < r.y + r.h);
-        return hit ? hit.type : null;
-    }
-
-    isInsideFloatingLayer(coords) {
-        const { x, y, w, h } = this.model.floatingLayer;
-        return coords.x >= x && coords.x <= x + w && coords.y >= y && coords.y <= y + h;
-    }
-
-    beginFloatingResize(handle) {
-        const fl = this.model.floatingLayer;
-        const geo = HANDLE_GEOMETRY[handle];
-        return {
-            mode: 'resize',
-            geo,
-            anchor: {
-                x: geo.hasH ? (geo.signH === -1 ? fl.x + fl.w : fl.x) : fl.x,
-                y: geo.hasV ? (geo.signV === -1 ? fl.y + fl.h : fl.y) : fl.y,
-            },
-            startW: fl.w,
-            startH: fl.h,
-            startFlipH: fl.flipH,
-            startFlipV: fl.flipV,
-        };
-    }
-
-    applyFloatingResize(drag, coords, lockAspect) {
-        const fl = this.model.floatingLayer;
-        const { geo, anchor, startW, startH } = drag;
-
-        let w = geo.hasH ? Math.abs(coords.x - anchor.x) : startW;
-        let h = geo.hasV ? Math.abs(coords.y - anchor.y) : startH;
-
-        if (lockAspect && geo.hasH && geo.hasV && startW && startH) {
-            const ratio = startW / startH;
-            if (w / ratio >= h) h = w / ratio;
-            else w = h * ratio;
-        }
-
-        if (geo.hasH) {
-            const side = coords.x < anchor.x ? -1 : 1;
-            fl.flipH = drag.startFlipH !== (side !== geo.signH);
-            fl.w = w;
-            fl.x = side === -1 ? anchor.x - w : anchor.x;
-        }
-
-        if (geo.hasV) {
-            const side = coords.y < anchor.y ? -1 : 1;
-            fl.flipV = drag.startFlipV !== (side !== geo.signV);
-            fl.h = h;
-            fl.y = side === -1 ? anchor.y - h : anchor.y;
-        }
-    }
-
     handleMouseMove(e) {
         if (this.floatingDrag) {
             const coords = this.getCanvasCoords(e);
-            const fl = this.model.floatingLayer;
-            if (this.floatingDrag.mode === 'move') {
-                fl.x = this.floatingDrag.startX + (coords.x - this.floatingDrag.start.x);
-                fl.y = this.floatingDrag.startY + (coords.y - this.floatingDrag.start.y);
-            } else {
-                this.applyFloatingResize(this.floatingDrag, coords, e.shiftKey);
-            }
+            this.model.applyFloatingDrag(coords, e.shiftKey);
             this.render_view();
             return;
         }
@@ -361,6 +282,7 @@ export default class ImageController {
 
     async handleMouseUp() {
         if (this.floatingDrag) {
+            this.model.endFloatingDrag();
             this.floatingDrag = null;
             return;
         }

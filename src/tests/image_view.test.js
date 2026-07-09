@@ -240,31 +240,36 @@ describe('drawSelection', () => {
   });
 });
 
-describe('getHandleRects', () => {
-  test('returns 8 handles centered on the corners and edge midpoints of the bounds', () => {
+describe('hitTestHandle', () => {
+  test('returns the handle name when coords land exactly on a handle center', () => {
     view.zoom = 1;
     const bounds = { x: 10, y: 20, w: 30, h: 40 };
 
-    const rects = view.getHandleRects(bounds);
-
-    expect(rects).toHaveLength(8);
-    const centers = Object.fromEntries(rects.map(r => [r.type, { x: r.x + r.w / 2, y: r.y + r.h / 2 }]));
-    expect(centers.nw).toStrictEqual({ x: 10, y: 20 });
-    expect(centers.n).toStrictEqual({ x: 25, y: 20 });
-    expect(centers.ne).toStrictEqual({ x: 40, y: 20 });
-    expect(centers.e).toStrictEqual({ x: 40, y: 40 });
-    expect(centers.se).toStrictEqual({ x: 40, y: 60 });
-    expect(centers.s).toStrictEqual({ x: 25, y: 60 });
-    expect(centers.sw).toStrictEqual({ x: 10, y: 60 });
-    expect(centers.w).toStrictEqual({ x: 10, y: 40 });
+    expect(view.hitTestHandle(bounds, { x: 10, y: 20 })).toBe('nw');
+    expect(view.hitTestHandle(bounds, { x: 25, y: 20 })).toBe('n');
+    expect(view.hitTestHandle(bounds, { x: 40, y: 20 })).toBe('ne');
+    expect(view.hitTestHandle(bounds, { x: 40, y: 40 })).toBe('e');
+    expect(view.hitTestHandle(bounds, { x: 40, y: 60 })).toBe('se');
+    expect(view.hitTestHandle(bounds, { x: 25, y: 60 })).toBe('s');
+    expect(view.hitTestHandle(bounds, { x: 10, y: 60 })).toBe('sw');
+    expect(view.hitTestHandle(bounds, { x: 10, y: 40 })).toBe('w');
   });
 
-  test('shrinks handle size as zoom increases, to keep on-screen size constant', () => {
-    view.zoom = 2;
-    const rects = view.getHandleRects({ x: 0, y: 0, w: 10, h: 10 });
+  test('returns null when coords miss every handle', () => {
+    view.zoom = 1;
+    const bounds = { x: 10, y: 20, w: 30, h: 40 };
 
-    expect(rects[0].w).toBe(4); // HANDLE_SIZE(8) / zoom(2)
-    expect(rects[0].h).toBe(4);
+    expect(view.hitTestHandle(bounds, { x: 25, y: 40 })).toBeNull(); // center of the box
+  });
+
+  test('shrinks the hit area as zoom increases, to keep on-screen handle size constant', () => {
+    view.zoom = 2;
+    const bounds = { x: 0, y: 0, w: 10, h: 10 };
+
+    // handle size at zoom 2 is HANDLE_SIZE(8)/zoom(2) = 4 canvas px, so the nw hit
+    // area spans roughly [-2, 2) on each axis.
+    expect(view.hitTestHandle(bounds, { x: 1, y: 1 })).toBe('nw');
+    expect(view.hitTestHandle(bounds, { x: 3, y: 3 })).toBeNull();
   });
 });
 

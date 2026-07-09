@@ -90,9 +90,9 @@ export default class ImageView {
         this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, SELECTION_COLOR);
     }
 
-    // Bounding-box corners + edge midpoints, in canvas coordinates. Used both to render the
-    // handles and (by the controller) to hit-test mousedown against them.
-    getHandleRects(bounds) {
+    // Bounding-box corners + edge midpoints, in canvas coordinates. Private: only
+    // drawHandles and hitTestHandle need handle geometry.
+    #getHandleRects(bounds) {
         const size = HANDLE_SIZE / this.zoom;
         return Object.entries(HANDLE_POSITIONS).map(([type, [px, py]]) => ({
             type,
@@ -103,12 +103,19 @@ export default class ImageView {
         }));
     }
 
+    // Used by the controller to hit-test a mousedown against a floating layer's handles.
+    hitTestHandle(bounds, coords) {
+        const hit = this.#getHandleRects(bounds)
+            .find(r => coords.x >= r.x && coords.x < r.x + r.w && coords.y >= r.y && coords.y < r.y + r.h);
+        return hit ? hit.type : null;
+    }
+
     drawHandles(floating) {
         this.uiCtx.fillStyle = '#fff';
         this.uiCtx.strokeStyle = '#000';
         this.uiCtx.setLineDash([]);
         this.uiCtx.lineWidth = 1 / this.zoom;
-        for (const r of this.getHandleRects(floating)) {
+        for (const r of this.#getHandleRects(floating)) {
             this.uiCtx.fillRect(r.x, r.y, r.w, r.h);
             this.uiCtx.strokeRect(r.x, r.y, r.w, r.h);
         }
