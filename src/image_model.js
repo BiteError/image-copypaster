@@ -82,21 +82,6 @@ export default class ImageModel {
         this.selection.enterFloating(pasted);
     }
 
-    getFloatingLayerPreview() {
-        if (!this.hasFloatingLayer()) return null;
-        return this.selection.preview();
-    }
-
-    getFloatingRenderInfo() {
-        if (!this.hasFloatingLayer()) return null;
-        const { x, y, w, h } = this.selection.bounds();
-        return {
-            x, y, w, h,
-            shape: this.selection.type,
-            bitmap: this.getFloatingLayerPreview(),
-        };
-    }
-
     // Starts a fresh full-Canvas rectangular selection (Select All). No-op on an empty
     // Canvas, since there's nothing to select.
     selectAll() {

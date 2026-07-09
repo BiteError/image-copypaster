@@ -15,7 +15,7 @@ export default class ImageController {
     }
 
     render_view(){
-        this.view.render(this.model.mainImage, this.model.selection, this.model.getFloatingRenderInfo());
+        this.view.render(this.model.mainImage, this.model.selection);
     }
 
     async commitFloating() {

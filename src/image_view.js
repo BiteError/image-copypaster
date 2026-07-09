@@ -36,7 +36,7 @@ export default class ImageView {
         this.resize(300, 150);
     }
 
-    render(bitmap, selection, floating = null) {
+    render(bitmap, selection) {
         if (!bitmap) return;
         const width = bitmap.width;
         const height = bitmap.height;
@@ -54,9 +54,9 @@ export default class ImageView {
         // ui-layer is pointer-events:none by default so a fresh selection drag reaches
         // image-canvas underneath; once a selection exists (marquee or floating) it needs
         // to catch its own handle/drag interactions instead.
-        this.uiCanvas.style.pointerEvents = (selection || floating) ? 'auto' : 'none';
+        this.uiCanvas.style.pointerEvents = selection ? 'auto' : 'none';
 
-        this.drawSelection(selection, floating);
+        this.drawSelection(selection);
     }
 
     toImageData(bitmap) {
@@ -76,18 +76,18 @@ export default class ImageView {
         this.uiCanvas.style.height = (height * this.zoom) + 'px';
     }
 
-    drawSelection(sel, floating = null) {
+    drawSelection(sel) {
         this.uiCtx.clearRect(0, 0, this.uiCanvas.width, this.uiCanvas.height);
 
-        if (floating) {
-            this.uiCtx.putImageData(this.toImageData(floating.bitmap), floating.x, floating.y);
-            this.strokeOutline(floating.shape, floating.x, floating.y, floating.w, floating.h, FLOATING_LAYER_COLOR);
-            this.drawHandles(floating);
-            return;
-        }
-
         if (!sel) return;
-        this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, SELECTION_COLOR);
+
+        if (sel.isFloating) {
+            const bitmap = sel.preview();
+            this.uiCtx.putImageData(this.toImageData(bitmap), sel.x, sel.y);
+            this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, FLOATING_LAYER_COLOR);
+        } else {
+            this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, SELECTION_COLOR);
+        }
         this.drawHandles(sel);
     }
 

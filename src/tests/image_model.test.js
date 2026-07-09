@@ -303,12 +303,12 @@ test('manipulateSelection rotating a floating selection 4 times returns to the o
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
   model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
   await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
-  const before = Array.from(model.getFloatingLayerPreview().data());
+  const before = Array.from(model.selection.preview().data());
 
   for (let i = 0; i < 4; i++) await model.manipulateSelection('rotateCW');
 
   expect(model.selection.rotation).toBe(0);
-  expect(Array.from(model.getFloatingLayerPreview().data())).toStrictEqual(before);
+  expect(Array.from(model.selection.preview().data())).toStrictEqual(before);
 });
 
 test('manipulateSelection flipping a floating selection twice returns to the original preview pixel-for-pixel', async () => {
@@ -316,13 +316,13 @@ test('manipulateSelection flipping a floating selection twice returns to the ori
   await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
   model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
   await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
-  const before = Array.from(model.getFloatingLayerPreview().data());
+  const before = Array.from(model.selection.preview().data());
 
   await model.manipulateSelection('flipH');
   await model.manipulateSelection('flipH');
 
   expect(model.selection.flipH).toBe(false);
-  expect(Array.from(model.getFloatingLayerPreview().data())).toStrictEqual(before);
+  expect(Array.from(model.selection.preview().data())).toStrictEqual(before);
 });
 
 test('commitFloatingLayer is a no-op when there is no floating layer', async () => {
@@ -427,72 +427,6 @@ test('cancelFloatingLayer is a no-op without a floating layer', () => {
 
   expect(cancelSpy).not.toThrow();
   expect(model.selection).toBeNull();
-});
-
-test('getFloatingLayerPreview returns null when there is no floating layer', () => {
-  const model = new ImageModel();
-  expect(model.getFloatingLayerPreview()).toBeNull();
-});
-
-test('getFloatingLayerPreview resizes to the current w/h without mutating the original bitmap', async () => {
-  const model = new ImageModel();
-  await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 50, h: 50 });
-  await model.pasteIntoSelection(await create_solid_png_buffer(50, 50, BLACK));
-  model.selection.w = 20;
-  model.selection.h = 10;
-
-  const preview = model.getFloatingLayerPreview();
-
-  expect(preview.width).toBe(20);
-  expect(preview.height).toBe(10);
-  expect(model.selection.original.width).toBe(50); // untouched
-  expect(model.selection.original.height).toBe(50);
-});
-
-test('getFloatingLayerPreview masks to an ellipse when the selection shape is ellipse', async () => {
-  const model = new ImageModel();
-  await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = new Selection({ type: 'ellipse', x: 0, y: 0, w: 100, h: 100 });
-  await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
-
-  const preview = model.getFloatingLayerPreview();
-  const data = preview.data();
-
-  expect(data[3]).toBe(0); // corner (0,0), outside the ellipse
-  const centerIdx = (50 * 100 + 50) * 4;
-  expect(data[centerIdx + 3]).toBe(255); // center, inside the ellipse
-});
-
-test('getFloatingLayerPreview repeated calls with the same rotation produce identical results (no cumulative loss)', async () => {
-  const model = new ImageModel();
-  await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
-  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
-  await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
-  model.selection.rotation = 90;
-
-  const first = model.getFloatingLayerPreview();
-  const second = model.getFloatingLayerPreview();
-
-  expect(Array.from(first.data())).toStrictEqual(Array.from(second.data()));
-});
-
-test('getFloatingRenderInfo returns null when there is no floating layer', () => {
-  const model = new ImageModel();
-  expect(model.getFloatingRenderInfo()).toBeNull();
-});
-
-test('getFloatingRenderInfo returns bounds, shape, and a fresh preview bitmap when a floating layer is active', async () => {
-  const model = new ImageModel();
-  await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-  model.selection = new Selection({ type: 'ellipse', x: 10, y: 20, w: 30, h: 40 });
-  await model.pasteIntoSelection(await create_solid_png_buffer(30, 40, BLACK));
-
-  const info = model.getFloatingRenderInfo();
-
-  expect(info).toMatchObject({ x: 10, y: 20, w: 30, h: 40, shape: 'ellipse' });
-  expect(info.bitmap.width).toBe(30);
-  expect(info.bitmap.height).toBe(40);
 });
 
 test('selectAll starts a full-Canvas rectangular selection', async () => {

@@ -1,8 +1,22 @@
 // @vitest-environment jsdom
 import { expect, test, describe, beforeEach, afterEach, vi } from 'vitest'
 import ImageView from '../image_view.js'
+import Selection from '../selection.js'
 import { mountFixtureWithCanvasStub } from './dom_helpers.js'
-import { create_test_bitmap } from './test_helpers.js'
+import { create_test_bitmap, create_solid_bitmap } from './test_helpers.js'
+
+const BLACK = { r: 0, g: 0, b: 0 };
+
+function makeMarquee(x = 20, y = 20, w = 40, h = 40, type = 'rect') {
+  return new Selection({ x, y, w, h, type });
+}
+
+async function makeFloating(x = 20, y = 20, w = 40, h = 40, type = 'rect') {
+  const sel = makeMarquee(x, y, w, h, type);
+  const original = await create_solid_bitmap(w, h, BLACK);
+  sel.enterFloating(original);
+  return sel;
+}
 
 function stubWindowSize(width, height) {
   vi.stubGlobal('innerWidth', width);
@@ -103,22 +117,22 @@ describe('render', () => {
     stubWindowSize(2000, 2000);
     const bitmap = await create_test_bitmap();
     const drawSelectionSpy = vi.spyOn(view, 'drawSelection');
-    const selection = { x: 1, y: 2, w: 3, h: 4 };
+    const selection = makeMarquee(1, 2, 3, 4);
 
     view.render(bitmap, selection);
 
-    expect(drawSelectionSpy).toHaveBeenCalledWith(selection, null);
+    expect(drawSelectionSpy).toHaveBeenCalledWith(selection);
   });
 
-  test('passes a floating layer through to drawSelection', async () => {
+  test('calls through to drawSelection with a floating selection', async () => {
     stubWindowSize(2000, 2000);
     const bitmap = await create_test_bitmap();
     const drawSelectionSpy = vi.spyOn(view, 'drawSelection');
-    const floating = { x: 1, y: 2, w: 3, h: 4, shape: 'rect', bitmap: await create_test_bitmap() };
+    const floating = await makeFloating(1, 2, 3, 4);
 
-    view.render(bitmap, null, floating);
+    view.render(bitmap, floating);
 
-    expect(drawSelectionSpy).toHaveBeenCalledWith(null, floating);
+    expect(drawSelectionSpy).toHaveBeenCalledWith(floating);
   });
 
   test('draws the bitmap pixel data via putImageData', async () => {
@@ -150,7 +164,7 @@ describe('render', () => {
       stubWindowSize(2000, 2000);
       const bitmap = await create_test_bitmap();
 
-      view.render(bitmap, { type: 'rect', x: 0, y: 0, w: 10, h: 10 });
+      view.render(bitmap, makeMarquee(0, 0, 10, 10));
 
       expect(view.uiCanvas.style.pointerEvents).toBe('auto');
     });
@@ -158,9 +172,9 @@ describe('render', () => {
     test('is auto while a floating layer is active', async () => {
       stubWindowSize(2000, 2000);
       const bitmap = await create_test_bitmap();
-      const floating = { x: 0, y: 0, w: 10, h: 10, shape: 'rect', bitmap };
+      const floating = await makeFloating(0, 0, 10, 10);
 
-      view.render(bitmap, null, floating);
+      view.render(bitmap, floating);
 
       expect(view.uiCanvas.style.pointerEvents).toBe('auto');
     });
@@ -242,26 +256,23 @@ describe('drawSelection', () => {
   });
 
   describe('with a floating layer', () => {
-    test('paints the floating bitmap at its position and outlines it in a distinct color, ignoring sel', async () => {
-      const bitmap = await create_test_bitmap();
-      const floating = { x: 5, y: 6, w: bitmap.width, h: bitmap.height, shape: 'rect', bitmap };
-      const sel = { type: 'rect', x: 100, y: 100, w: 10, h: 10 }; // should be ignored while floating
+    test('paints the preview bitmap at its position and outlines it in a distinct color', async () => {
+      const floating = await makeFloating(5, 6, 40, 40);
 
-      view.drawSelection(sel, floating);
+      view.drawSelection(floating);
 
       expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
       const [imageData, x, y] = uiCtx.putImageData.mock.calls[0];
-      expect(imageData.width).toBe(bitmap.width);
+      expect(imageData.width).toBe(40);
       expect(x).toBe(5);
       expect(y).toBe(6);
-      expect(uiCtx.strokeRect).toHaveBeenCalledWith(5, 6, bitmap.width, bitmap.height);
+      expect(uiCtx.strokeRect).toHaveBeenCalledWith(5, 6, 40, 40);
     });
 
     test('outlines with an ellipse when the floating shape is ellipse', async () => {
-      const bitmap = await create_test_bitmap();
-      const floating = { x: 0, y: 0, w: 30, h: 40, shape: 'ellipse', bitmap };
+      const floating = await makeFloating(0, 0, 30, 40, 'ellipse');
 
-      view.drawSelection(null, floating);
+      view.drawSelection(floating);
 
       expect(uiCtx.ellipse).toHaveBeenCalledWith(15, 20, 15, 20, 0, 0, Math.PI * 2);
       // strokeRect is still called for the 8 handles, but never for a 30x40 bounding-box outline
@@ -269,10 +280,9 @@ describe('drawSelection', () => {
     });
 
     test('renders 8 resize handles at the corners and edge midpoints', async () => {
-      const bitmap = await create_test_bitmap();
-      const floating = { x: 10, y: 20, w: 30, h: 40, shape: 'rect', bitmap };
+      const floating = await makeFloating(10, 20, 30, 40);
 
-      view.drawSelection(null, floating);
+      view.drawSelection(floating);
 
       expect(uiCtx.fillRect).toHaveBeenCalledTimes(8);
       expect(uiCtx.strokeRect).toHaveBeenCalledTimes(1 + 8); // outline + 8 handles
