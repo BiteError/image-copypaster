@@ -130,14 +130,21 @@ export default class Selection {
         this.#gesture = null;
     }
 
-    // Loads a bitmap as `original` and resets transform state, entering `floating`.
-    // Used directly for a one-shot marquee rotate/flip (ImageModel composites and calls
-    // exitFloating() right after); enterFloating() below wraps this for a real Paste.
-    loadOriginal(original) {
-        this.original = original;
+    // Clears `original`/rotation/flip back to their construction-time defaults.
+    #resetTransform() {
+        this.original = null;
         this.rotation = 0;
         this.flipH = false;
         this.flipV = false;
+    }
+
+    // Enters floating with `original`, without snapshotting bounds/shape for a later
+    // Cancel. For callers that immediately bake and exit - the one-shot marquee
+    // rotate/flip/resize, where ImageModel composites and calls exitFloating() right
+    // after - and so never offer a Cancel to restore.
+    enterTransientFloating(original) {
+        this.#resetTransform();
+        this.original = original;
     }
 
     // Entering floating for a real Paste: snapshots the pre-paste bounds/shape first, so
@@ -145,27 +152,21 @@ export default class Selection {
     // separate object that Cancel could just discard.
     enterFloating(original) {
         this.#snapshot = { x: this.x, y: this.y, w: this.w, h: this.h, type: this.type };
-        this.loadOriginal(original);
+        this.enterTransientFloating(original);
     }
 
     // Discards the floating state, restoring the bounds/shape snapshotted by enterFloating.
     cancelFloating() {
         Object.assign(this, this.#snapshot);
         this.#snapshot = null;
-        this.original = null;
-        this.rotation = 0;
-        this.flipH = false;
-        this.flipV = false;
+        this.#resetTransform();
     }
 
     // Clears floating state at the current (possibly moved/resized) bounds - used once
     // ImageModel has baked preview() into mainImage. No snapshot restore: these bounds
     // are the final ones, not something to revert.
     exitFloating() {
-        this.original = null;
-        this.rotation = 0;
-        this.flipH = false;
-        this.flipV = false;
+        this.#resetTransform();
         this.#snapshot = null;
     }
 

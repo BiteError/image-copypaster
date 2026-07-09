@@ -87,6 +87,36 @@ export default class ImageModel {
         return this.selection.preview();
     }
 
+    getFloatingRenderInfo() {
+        if (!this.hasFloatingLayer()) return null;
+        const { x, y, w, h } = this.selection.bounds();
+        return {
+            x, y, w, h,
+            shape: this.selection.type,
+            bitmap: this.getFloatingLayerPreview(),
+        };
+    }
+
+    // Starts a fresh full-Canvas rectangular selection (Select All). No-op on an empty
+    // Canvas, since there's nothing to select.
+    selectAll() {
+        if (this.isEmpty()) return;
+        this.selection = new Selection({ type: 'rect', x: 0, y: 0, w: this.mainImage.width, h: this.mainImage.height });
+    }
+
+    // Starts a fresh selection from raw drag geometry (already normalized to a
+    // non-negative x/y/w/h by the Controller from two dragged cursor points), shaped by
+    // the current shapeMode.
+    startDragSelection({ x, y, w, h }) {
+        this.selection = new Selection({ type: this.shapeMode, x, y, w, h });
+    }
+
+    // Changes the current selection's Shape in place. No-op without an active selection.
+    setSelectionShape(shapeMode) {
+        if (!this.selection) return;
+        this.selection.type = shapeMode;
+    }
+
     // marquee: crops fresh pixels, applies the transform once, and bakes them straight
     // back into mainImage - one history entry per press, no persistent rotation counter.
     // floating: the transform just accumulates on the selection in memory; nothing
@@ -101,7 +131,7 @@ export default class ImageModel {
 
         const { x, y, w, h } = this.selection;
         const cropped = this.mainImage.clone().crop(x, y, w, h);
-        this.selection.loadOriginal(cropped);
+        this.selection.enterTransientFloating(cropped);
         this.#applyTransform(type);
         this.mainImage.composite(this.selection.preview(), x, y);
         this.selection.exitFloating();

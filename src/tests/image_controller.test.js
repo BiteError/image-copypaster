@@ -87,24 +87,6 @@ test('constructs against the real fixture without throwing', () => {
   expect(controller).toBeInstanceOf(ImageController);
 });
 
-describe('getFloatingRenderInfo', () => {
-  test('returns null when there is no floating layer', () => {
-    expect(controller.getFloatingRenderInfo()).toBeNull();
-  });
-
-  test('returns bounds, shape, and a fresh preview bitmap when a floating layer is active', async () => {
-    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
-    model.selection = new Selection({ type: 'ellipse', x: 10, y: 20, w: 30, h: 40 });
-    await model.pasteIntoSelection(await create_solid_png_buffer(30, 40, BLACK));
-
-    const info = controller.getFloatingRenderInfo();
-
-    expect(info).toMatchObject({ x: 10, y: 20, w: 30, h: 40, shape: 'ellipse' });
-    expect(info.bitmap.width).toBe(30);
-    expect(info.bitmap.height).toBe(40);
-  });
-});
-
 describe('handlePaste', () => {
   test('ignores non-image clipboard items', async () => {
     const createNewSpy = vi.spyOn(model, 'createNew');

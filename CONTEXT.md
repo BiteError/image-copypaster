@@ -21,7 +21,7 @@ Insert an image from the system clipboard. With no Selection, the pasted image b
 _Avoid_: import, insert
 
 **Floating Layer**:
-A non-destructive, uncommitted image produced by a Paste into an active Selection. Holds its original bitmap untouched alongside position, size, rotation, and flip transform parameters; every render re-derives the displayed pixels from the original bitmap rather than baking transforms in, so repeated adjustment never compounds quality loss. Shares the Selection's Shape for masking and outline. Only one can exist at a time — it must Commit or Cancel before another Paste can start.
+The state a Selection enters once a Paste gives it pixel content, non-destructive and uncommitted. Holds its original bitmap untouched alongside position, size, rotation, and flip transform parameters; every render re-derives the displayed pixels from the original bitmap rather than baking transforms in, so repeated adjustment never compounds quality loss. Shares the Selection's Shape for masking and outline. Only one can exist at a time — it must Commit or Cancel before another Paste can start.
 _Avoid_: preview layer, pending paste, staged image
 
 **Handle**:

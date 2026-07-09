@@ -477,6 +477,66 @@ test('getFloatingLayerPreview repeated calls with the same rotation produce iden
   expect(Array.from(first.data())).toStrictEqual(Array.from(second.data()));
 });
 
+test('getFloatingRenderInfo returns null when there is no floating layer', () => {
+  const model = new ImageModel();
+  expect(model.getFloatingRenderInfo()).toBeNull();
+});
+
+test('getFloatingRenderInfo returns bounds, shape, and a fresh preview bitmap when a floating layer is active', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+  model.selection = new Selection({ type: 'ellipse', x: 10, y: 20, w: 30, h: 40 });
+  await model.pasteIntoSelection(await create_solid_png_buffer(30, 40, BLACK));
+
+  const info = model.getFloatingRenderInfo();
+
+  expect(info).toMatchObject({ x: 10, y: 20, w: 30, h: 40, shape: 'ellipse' });
+  expect(info.bitmap.width).toBe(30);
+  expect(info.bitmap.height).toBe(40);
+});
+
+test('selectAll starts a full-Canvas rectangular selection', async () => {
+  const model = new ImageModel();
+  await model.createNew(await create_solid_png_buffer(120, 80, WHITE));
+
+  model.selectAll();
+
+  expect(model.selection).toMatchObject({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
+});
+
+test('selectAll is a no-op on an empty model', () => {
+  const model = new ImageModel();
+
+  model.selectAll();
+
+  expect(model.selection).toBeNull();
+});
+
+test('startDragSelection starts a selection with the given bounds, shaped by the current shapeMode', () => {
+  const model = new ImageModel();
+  model.shapeMode = 'ellipse';
+
+  model.startDragSelection({ x: 5, y: 10, w: 15, h: 20 });
+
+  expect(model.selection).toMatchObject({ type: 'ellipse', x: 5, y: 10, w: 15, h: 20 });
+});
+
+test('setSelectionShape changes the current selection\'s shape', () => {
+  const model = new ImageModel();
+  model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 10, h: 10 });
+
+  model.setSelectionShape('ellipse');
+
+  expect(model.selection.type).toBe('ellipse');
+});
+
+test('setSelectionShape is a no-op without an active selection', () => {
+  const model = new ImageModel();
+
+  expect(() => model.setSelectionShape('ellipse')).not.toThrow();
+  expect(model.selection).toBeNull();
+});
+
 test('updateCopyBlob is a no-op on an empty model', async () => {
   const model = new ImageModel();
   model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });

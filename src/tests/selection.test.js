@@ -119,12 +119,12 @@ describe('entering/exiting floating', () => {
     expect(sel.flipV).toBe(false);
   });
 
-  test('loadOriginal loads a bitmap and resets transform without snapshotting for cancel', async () => {
+  test('enterTransientFloating loads a bitmap and resets transform without snapshotting for cancel', async () => {
     const sel = makeMarquee(10, 10, 30, 30);
-    sel.rotate('cw'); // pre-existing transform state, should be reset by loadOriginal
+    sel.rotate('cw'); // pre-existing transform state, should be reset by enterTransientFloating
     const original = await create_solid_bitmap(30, 30, BLACK);
 
-    sel.loadOriginal(original);
+    sel.enterTransientFloating(original);
 
     expect(sel.isFloating).toBe(true);
     expect(sel.rotation).toBe(0);
@@ -164,7 +164,7 @@ describe('preview', () => {
   test('resizes to the current w/h without mutating the original bitmap', async () => {
     const original = await create_solid_bitmap(50, 50, BLACK);
     const sel = makeMarquee(0, 0, 50, 50);
-    sel.loadOriginal(original);
+    sel.enterTransientFloating(original);
     sel.w = 20;
     sel.h = 10;
 
@@ -179,7 +179,7 @@ describe('preview', () => {
   test('masks corners transparent for shape:"ellipse"', async () => {
     const original = await create_solid_bitmap(100, 100, BLACK);
     const sel = makeMarquee(0, 0, 100, 100, 'ellipse');
-    sel.loadOriginal(original);
+    sel.enterTransientFloating(original);
 
     const data = sel.preview().data();
 
@@ -191,7 +191,7 @@ describe('preview', () => {
   test('leaves corners opaque for shape:"rect"', async () => {
     const original = await create_solid_bitmap(20, 20, BLACK);
     const sel = makeMarquee(0, 0, 20, 20, 'rect');
-    sel.loadOriginal(original);
+    sel.enterTransientFloating(original);
 
     expect(sel.preview().data()[3]).toBe(255);
   });

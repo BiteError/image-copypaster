@@ -1,5 +1,3 @@
-import Selection from './selection.js'
-
 /**
  * CONTROLLER: Orchestrates View and Model
  */
@@ -17,17 +15,7 @@ export default class ImageController {
     }
 
     render_view(){
-        this.view.render(this.model.mainImage, this.model.selection, this.getFloatingRenderInfo());
-    }
-
-    getFloatingRenderInfo() {
-        if (!this.model.hasFloatingLayer()) return null;
-        const { x, y, w, h } = this.model.selection.bounds();
-        return {
-            x, y, w, h,
-            shape: this.model.selection.type,
-            bitmap: this.model.getFloatingLayerPreview(),
-        };
+        this.view.render(this.model.mainImage, this.model.selection, this.model.getFloatingRenderInfo());
     }
 
     async commitFloating() {
@@ -127,7 +115,7 @@ export default class ImageController {
         else if (ctrl && key === 'a') {
             e.preventDefault();
             if (this.model.notEmpty()) {
-                this.model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: this.model.mainImage.width, h: this.model.mainImage.height });
+                this.model.selectAll();
                 this.model.updateCopyBlob();
                 this.view.drawSelection(this.model.selection);
             }
@@ -203,7 +191,7 @@ export default class ImageController {
         }
         this.model.shapeMode = this.model.shapeMode === 'ellipse' ? 'rect' : 'ellipse';
         if (this.model.selection) {
-            this.model.selection.type = this.model.shapeMode;
+            this.model.setSelectionShape(this.model.shapeMode);
             this.view.drawSelection(this.model.selection);
             if (!this.isSelecting) {
                 await this.model.updateCopyBlob();
@@ -285,8 +273,7 @@ export default class ImageController {
         if (!this.isSelecting) return;
 
         const current = this.getCanvasCoords(e);
-        this.model.selection = new Selection({
-            type: this.model.shapeMode,
+        this.model.startDragSelection({
             x: Math.min(this.startPos.x, current.x),
             y: Math.min(this.startPos.y, current.y),
             w: Math.abs(current.x - this.startPos.x),
