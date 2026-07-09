@@ -242,18 +242,17 @@ export default class ImageController {
     handleAltClick(e) {
         if (e.shiftKey) {
             this.model.alphaKey = null;
-            this.view.setAlphaColor(this.model.alphaKey);
-            return;
-        }
-
-        const coords = this.getCanvasCoords(e);
-        const sel = this.model.selection;
-        if (this.model.hasFloatingLayer() && sel.contains(coords)) {
-            this.model.alphaKey = sel.colorAt(coords, this.model.alphaKey, this.model.colorTolerance);
         } else {
-            this.model.alphaKey = this.model.mainImage.pixel_color(coords.x, coords.y);
+            const coords = this.getCanvasCoords(e);
+            const sel = this.model.selection;
+            if (this.model.hasFloatingLayer() && sel.contains(coords)) {
+                this.model.alphaKey = sel.colorAt(coords, this.model.alphaKey, this.model.colorTolerance);
+            } else {
+                this.model.alphaKey = this.model.mainImage.pixel_color(coords.x, coords.y);
+            }
         }
         this.view.setAlphaColor(this.model.alphaKey);
+        this.render_view();
     }
 
     // Routes a mousedown against an existing selection (marquee or floating) to a
@@ -333,6 +332,7 @@ export default class ImageController {
             this.model.alphaKey = null;
         }
         this.view.setAlphaColor(this.model.alphaKey);
+        this.render_view();
     }
 
     handleToleranceChange(e) {

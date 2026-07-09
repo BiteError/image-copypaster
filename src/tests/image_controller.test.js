@@ -562,6 +562,14 @@ describe('handleMouseDown', () => {
     expect(fakeView.setAlphaColor).toHaveBeenCalledWith(BLACK);
   });
 
+  test('alt+click does not error when there is no floating layer', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE, BLACK));
+
+    dispatchMouseDown({ clientX: 0, clientY: 0, altKey: true });
+
+    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+  });
+
   test('alt+shift+click clears alphaKey', async () => {
     await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
     model.alphaKey = BLACK;
@@ -597,12 +605,28 @@ describe('handleMouseDown', () => {
       expect(fakeView.setAlphaColor).toHaveBeenCalledWith({ r: 9, g: 9, b: 9 });
     });
 
+    test('alt+click inside the bounds re-renders the live preview with the newly sampled key', async () => {
+      await setupFloatingLayer(20, 20, 40, 40);
+
+      dispatchMouseDown({ clientX: 20, clientY: 20, altKey: true });
+
+      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+    });
+
     test('alt+click outside the bounds samples from mainImage, unchanged', async () => {
       await setupFloatingLayer(20, 20, 40, 40);
 
       dispatchMouseDown({ clientX: 90, clientY: 90, altKey: true }); // outside the floating layer, on WHITE background
 
       expect(model.alphaKey).toStrictEqual(WHITE);
+    });
+
+    test('alt+click outside the bounds still re-renders the floating layer preview', async () => {
+      await setupFloatingLayer(20, 20, 40, 40);
+
+      dispatchMouseDown({ clientX: 90, clientY: 90, altKey: true });
+
+      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
     });
 
     test('alt+click does not begin a resize/move gesture', async () => {
@@ -623,6 +647,15 @@ describe('handleMouseDown', () => {
 
       expect(model.alphaKey).toBeNull();
       expect(fakeView.setAlphaColor).toHaveBeenCalledWith(null);
+    });
+
+    test('alt+shift+click re-renders the floating layer preview back to opaque', async () => {
+      await setupFloatingLayer(20, 20, 40, 40);
+      model.alphaKey = BLACK;
+
+      dispatchMouseDown({ clientX: 40, clientY: 40, altKey: true, shiftKey: true });
+
+      expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, null, model.colorTolerance);
     });
   });
 });
@@ -935,6 +968,24 @@ describe('handleTransparencyToggle / transparency-toggle', () => {
 
     expect(model.alphaKey).toBeNull();
     expect(fakeView.setAlphaColor).toHaveBeenCalledWith(null);
+  });
+
+  test('does not error when there is no floating layer', () => {
+    model.alphaKey = null;
+
+    document.getElementById('transparency-toggle').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
+  });
+
+  test('re-renders live when a floating layer is active', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 40, h: 40 });
+    await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
+
+    document.getElementById('transparency-toggle').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(fakeView.render).toHaveBeenCalledWith(model.mainImage, model.selection, model.alphaKey, model.colorTolerance);
   });
 });
 
