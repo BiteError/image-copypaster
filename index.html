@@ -15,43 +15,106 @@
 <body>
 
   <div id="toolbar">
-    <button class="primary" id="reset-btn">Clear canvas</button>
-    <button id="flip-horizontally-btn" data-hint="(H)">Flip Horizontally</button>
-    <button id="flip-vertically-btn" data-hint="(V)">Flip Vertically</button>
-    <button id="rotate-btn" data-hint="(R)">Rotate</button>
-    <div class="toggle-group">
-      <button id="shape-toggle-btn" data-hint="(Space)">Shape: ▭</button>
-      <label for="shape-slider">Roundness</label>
-      <input type="range" id="shape-slider" min="1" max="8" step="0.1" value="2">
+    <!-- Desktop toolbar: a single always-visible row, hidden entirely on coarse pointers. -->
+    <div id="toolbar-desktop">
+      <button class="primary js-reset-btn" id="reset-btn" aria-label="Clear canvas">New</button>
+      <button class="js-paste-btn" id="paste-btn">Paste</button>
+      <button class="js-copy-share-btn" id="copy-share-btn">Copy</button>
+      <button class="js-flip-h-btn" id="flip-horizontally-btn" data-hint="Flip horizontally (H)" aria-label="Flip horizontally">⇉</button>
+      <button class="js-flip-v-btn" id="flip-vertically-btn" data-hint="Flip vertically (V)" aria-label="Flip vertically">⇊</button>
+      <button class="js-rotate-btn" id="rotate-btn" data-hint="(R)" aria-label="Rotate">⤵︎</button>
+
+      <div class="toggle-group">
+        <button class="js-shape-toggle" id="shape-toggle-btn" data-hint="(Space)" aria-label="Toggle selection shape">⛶</button>
+        <span class="hint-wrap" data-hint="Roundness: 2">
+          <input class="js-shape-slider" type="range" id="shape-slider" min="1" max="8" step="0.1" value="2">
+        </span>
+      </div>
+
+      <div class="toggle-group">
+        <span class="hint-wrap">
+          <input class="js-transparency-toggle" type="checkbox" id="transparency-toggle">
+        </span>
+        <label for="transparency-toggle">Enable Alpha Paste</label>
+        <button class="js-alpha-pick-btn" id="alpha-pick-btn" aria-label="Pick Alpha Key by tapping the canvas" data-hint="(Click on canvas)">Pick 🎨</button>
+        <span class="hint-wrap" data-hint="Selected alpha-color">
+          <div class="alpha-color js-alpha-color" id="alpha-color" style="background: transparent;"></div>        
+        </span>
+        <span class="hint-wrap" data-hint="Tolerance: 10">
+          <input class="js-tolerance-slider" type="range" id="tolerance-slider" min="0" max="100" value="10">
+        </span>
+      </div>
+
+      <button id="help-btn" aria-label="Keyboard shortcuts">?</button>
+
+      <div class="help-panel hidden" id="help-panel" role="dialog" aria-label="Keyboard shortcuts">
+        <ul>
+          <li><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd> Copy</li>
+          <li><kbd>⌘/Ctrl</kbd>+<kbd>V</kbd> Paste</li>
+          <li><kbd>⌘/Ctrl</kbd>+<kbd>A</kbd> Select all</li>
+          <li><kbd>H</kbd>/<kbd>V</kbd> Flip</li>
+          <li><kbd>R</kbd> Rotate</li>
+          <li><kbd>Space</kbd> Toggle shape</li>
+          <li><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd> Undo</li>
+          <li><kbd>⌘/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo</li>
+          <li><kbd>⌥/Alt</kbd>+<kbd>Click</kbd> on image to choose and</li>
+          <li>enable alpha-color (disable with <kbd>Shift</kbd>)</li>
+        </ul>
+      </div>
     </div>
 
+    <!-- Mobile toolbar: a compact always-visible primary row plus a togglable hidden
+         panel for less-frequently-used controls. Hidden entirely on fine pointers. -->
+    <div id="toolbar-mobile">
+      <div id="primary-bar">
+        <button class="js-paste-btn" id="paste-btn-mobile">Paste</button>
+        <button class="js-copy-share-btn" id="copy-share-btn-mobile">Copy</button>
+        <button id="undo-btn" aria-label="Undo">←</button>
+        <button id="redo-btn" aria-label="Redo">→</button>
+        <button class="js-flip-v-btn" id="flip-vertically-btn-mobile" aria-label="Flip vertically">⇊</button>
+        <button class="js-flip-h-btn" id="flip-horizontally-btn-mobile" aria-label="Flip horizontally">⇉</button>
+        <button class="js-rotate-btn" id="rotate-btn-mobile" aria-label="Rotate">⤵︎</button>
+        <button class="js-shape-toggle" id="shape-toggle-btn-mobile" aria-label="Toggle selection shape">⛶</button>
+        <button id="cancel-btn">Esc</button>
+        <button id="drawer-toggle-btn" aria-label="More tools">⋯</button>
+      </div>
 
-    <div class="toggle-group">
-      <span class="hint-wrap" data-hint="(Alt + Click)">
-        <input type="checkbox" id="transparency-toggle">
-      </span>
-      <label for="transparency-toggle">Enable Alpha Paste</label>
-      <div class="alpha-color" id="alpha-color" style="background: transparent;"></div>
-      <label for="tolerance-slider">Tolerance</label>
-      <input type="range" id="tolerance-slider" min="0" max="100" value="10">
-    </div>
+      <div id="drawer" class="hidden">
+        <button class="primary js-reset-btn" id="reset-btn-mobile" aria-label="Clear canvas">New</button>
+        <button id="select-all-btn">Select All</button>
+        <button id="help-btn-mobile" aria-label="Help">?</button>
 
-    <button id="help-btn" aria-label="Keyboard shortcuts">?</button>
-    <div class="help-panel hidden" id="help-panel" role="dialog" aria-label="Keyboard shortcuts">
-      <ul>
-        <li><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd> Copy</li>
-        <li><kbd>⌘/Ctrl</kbd>+<kbd>V</kbd> Paste</li>
-        <li><kbd>⌘/Ctrl</kbd>+<kbd>A</kbd> Select all</li>
-        <li><kbd>H</kbd>/<kbd>V</kbd> Flip</li>
-        <li><kbd>R</kbd> Rotate</li>
-        <li><kbd>Space</kbd> Toggle shape</li>
-        <li><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd> Undo</li>
-        <li><kbd>⌘/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo</li>
-        <li><kbd>⌥/Alt</kbd>+<kbd>Click</kbd> on image to choose and</li>
-        <li>enable alpha-color (disable with <kbd>Shift</kbd>)</li>
-      </ul>
+        <div class="toggle-group">
+          <button class="js-shape-toggle" id="shape-toggle-btn-mobile-drawer" aria-label="Toggle selection shape">⛶</button>
+          <input class="js-shape-slider" type="range" id="shape-slider-mobile" min="1" max="8" step="0.1" value="2" aria-label="Roundness">
+        </div>
+
+        <div class="toggle-group">
+          <button class="js-alpha-pick-btn" id="alpha-pick-btn-mobile" aria-label="Pick Alpha Key by tapping the canvas">Pick 🎨</button>
+          <div class="alpha-color js-alpha-color" id="alpha-color-mobile" style="background: transparent;"></div>
+          <input class="js-transparency-toggle" type="checkbox" id="transparency-toggle-mobile">
+          <label for="transparency-toggle-mobile">Enable Alpha Paste</label>
+          <input class="js-tolerance-slider" type="range" id="tolerance-slider-mobile" min="0" max="100" value="10" aria-label="Tolerance">
+        </div>
+      </div>
+
+      <div class="help-panel hidden" id="help-panel-mobile" role="dialog" aria-label="Help">
+        <ul>
+          <li>Drag on the canvas to select an area</li>
+          <li>Drag inside a selection to move it, drag a handle to resize</li>
+          <li><kbd>←</kbd>/<kbd>→</kbd> Undo / Redo</li>
+          <li><kbd>⇊</kbd>/<kbd>⇉</kbd> Flip selection</li>
+          <li><kbd>⤵︎</kbd> Rotate selection</li>
+          <li><kbd>⛶</kbd>/<kbd>◌</kbd> Toggle rect / ellipse shape</li>
+          <li><kbd>Esc</kbd> Cancel a pasted selection before committing it</li>
+          <li><kbd>⋯</kbd> More tools: New, Select All, Roundness slider, Alpha Paste</li>
+          <li>Tap <kbd>Pick 🎨</kbd>, then tap the image to set the alpha-color key</li>
+        </ul>
+      </div>
     </div>
   </div>
+
+  <input type="file" id="paste-file-input" accept="image/*" class="hidden" aria-hidden="true">
 
   <div id="container">
     <canvas id="image-canvas"></canvas>

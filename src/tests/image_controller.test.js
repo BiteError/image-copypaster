@@ -35,6 +35,7 @@ function makeFakeView() {
     setAlphaColor: vi.fn(),
     clearCanvas: vi.fn(),
     setShapeMode: vi.fn(),
+    setAlphaPickArmed: vi.fn(),
     imgCanvas: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
     zoom: 1,
   };
@@ -80,7 +81,10 @@ beforeEach(() => {
   controller.model = model;
   controller.view = fakeView;
   controller.isSelecting = false;
+  controller.alphaPickArmed = false;
   navigator.clipboard.write.mockClear();
+  navigator.clipboard.read.mockReset();
+  navigator.share.mockReset();
 });
 
 test('constructs against the real fixture without throwing', () => {
@@ -1074,5 +1078,478 @@ describe('handleShapeExponentChange / shape-slider', () => {
 
     expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, 4);
     expect(updateCopyBlobSpy).not.toHaveBeenCalled();
+  });
+
+  test('desktop slider updates its hint-wrap tooltip with the live value', () => {
+    const slider = document.getElementById('shape-slider');
+    slider.value = '4';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(slider.closest('.hint-wrap').dataset.hint).toBe('Roundness: 4');
+  });
+
+  test('mobile drawer slider has no hint-wrap ancestor and does not error', () => {
+    const slider = document.getElementById('shape-slider-mobile');
+    slider.value = '4';
+
+    expect(() => slider.dispatchEvent(new Event('input', { bubbles: true }))).not.toThrow();
+    expect(slider.closest('.hint-wrap')).toBeNull();
+  });
+});
+
+describe('desktop/mobile toolbar wiring', () => {
+  // Controls duplicated between the desktop toolbar and the mobile one (primary bar
+  // and/or hidden drawer) share a js- class in index.html so one addEventListener
+  // pass wires every instance - these confirm the mobile instances actually fire.
+  test.each([
+    'flip-horizontally-btn-mobile',
+    'flip-vertically-btn-mobile',
+    'rotate-btn-mobile',
+  ])('%s calls manipulateSelection and re-renders same as its desktop counterpart', async (id) => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    model.selection = new Selection({ x: 0, y: 0, w: 100, h: 100 });
+    const manipulateSpy = vi.spyOn(model, 'manipulateSelection');
+
+    document.getElementById(id).dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(manipulateSpy).toHaveBeenCalled();
+    expect(fakeView.render).toHaveBeenCalled();
+  });
+
+  test.each(['shape-toggle-btn-mobile', 'shape-toggle-btn-mobile-drawer'])(
+    '%s toggles shape mode the same way the desktop button does',
+    (id) => {
+      expect(model.shapeMode).toBe('rect');
+
+      document.getElementById(id).dispatchEvent(new Event('click', { bubbles: true }));
+
+      expect(model.shapeMode).toBe('ellipse');
+      expect(fakeView.setShapeMode).toHaveBeenCalledWith('ellipse');
+    }
+  );
+
+  test('reset-btn-mobile calls model.clear() and view.clearCanvas()', () => {
+    const clearSpy = vi.spyOn(model, 'clear');
+
+    document.getElementById('reset-btn-mobile').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(clearSpy).toHaveBeenCalled();
+    expect(fakeView.clearCanvas).toHaveBeenCalled();
+  });
+
+  test('alpha-pick-btn-mobile arms the alpha color picker same as the desktop button', () => {
+    document.getElementById('alpha-pick-btn-mobile').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(fakeView.setAlphaPickArmed).toHaveBeenCalledWith(true);
+  });
+
+  test('transparency-toggle-mobile turns alphaKey on and forwards it to view.setAlphaColor', () => {
+    model.alphaKey = null;
+
+    document.getElementById('transparency-toggle-mobile').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.alphaKey).toStrictEqual({ r: 255, g: 255, b: 255 });
+    expect(fakeView.setAlphaColor).toHaveBeenCalledWith({ r: 255, g: 255, b: 255 });
+  });
+
+  test('tolerance-slider-mobile updates model.colorTolerance from the slider value', () => {
+    const slider = document.getElementById('tolerance-slider-mobile');
+    slider.value = '42';
+
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(model.colorTolerance).toBe(42);
+  });
+
+  test('paste-btn-mobile and copy-share-btn-mobile exist as distinct elements from their desktop counterparts', () => {
+    expect(document.getElementById('paste-btn-mobile')).not.toBe(document.getElementById('paste-btn'));
+    expect(document.getElementById('copy-share-btn-mobile')).not.toBe(document.getElementById('copy-share-btn'));
+  });
+});
+
+describe('help panels', () => {
+  test('help-btn toggles the desktop help-panel only', () => {
+    document.getElementById('help-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(document.getElementById('help-panel').classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('help-panel-mobile').classList.contains('hidden')).toBe(true);
+
+    document.getElementById('help-btn').dispatchEvent(new Event('click', { bubbles: true }));
+    expect(document.getElementById('help-panel').classList.contains('hidden')).toBe(true);
+  });
+
+  test('help-btn-mobile toggles the mobile help-panel only', () => {
+    document.getElementById('help-btn-mobile').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(document.getElementById('help-panel-mobile').classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('help-panel').classList.contains('hidden')).toBe(true);
+
+    document.getElementById('help-btn-mobile').dispatchEvent(new Event('click', { bubbles: true }));
+    expect(document.getElementById('help-panel-mobile').classList.contains('hidden')).toBe(true);
+  });
+
+  test('clicking outside an open mobile help-panel closes it', () => {
+    document.getElementById('help-btn-mobile').dispatchEvent(new Event('click', { bubbles: true }));
+    expect(document.getElementById('help-panel-mobile').classList.contains('hidden')).toBe(false);
+
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(document.getElementById('help-panel-mobile').classList.contains('hidden')).toBe(true);
+  });
+});
+
+describe('touch support', () => {
+  // jsdom doesn't support the native TouchEvent/Touch constructors, so - same as
+  // dispatchPaste's manually-attached clipboardData - attach plain touches/changedTouches
+  // arrays of { clientX, clientY } objects to a plain Event.
+  function dispatchTouchStart(touches) {
+    const event = new Event('touchstart', { bubbles: true, cancelable: true });
+    event.touches = touches;
+    window.dispatchEvent(event);
+    return event;
+  }
+  function dispatchTouchMove(touches) {
+    const event = new Event('touchmove', { bubbles: true, cancelable: true });
+    event.touches = touches;
+    window.dispatchEvent(event);
+    return event;
+  }
+  function dispatchTouchEnd(changedTouches, touches = []) {
+    const event = new Event('touchend', { bubbles: true, cancelable: true });
+    event.touches = touches;
+    event.changedTouches = changedTouches;
+    window.dispatchEvent(event);
+    return event;
+  }
+
+  test('single-touch drag draws a selection, same as a mouse drag', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+
+    dispatchTouchStart([{ clientX: 10, clientY: 20 }]);
+    dispatchTouchMove([{ clientX: 40, clientY: 50 }]);
+
+    expect(model.selection).toMatchObject({ type: 'rect', x: 10, y: 20, w: 30, h: 30 });
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
+  });
+
+  test('touchend finalizes the selection and updates the copy blob, mirroring mouseup', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+    dispatchTouchStart([{ clientX: 10, clientY: 20 }]);
+    dispatchTouchMove([{ clientX: 40, clientY: 50 }]);
+
+    dispatchTouchEnd([{ clientX: 40, clientY: 50 }]);
+
+    expect(controller.isSelecting).toBe(false);
+    await vi.waitFor(() => expect(updateCopyBlobSpy).toHaveBeenCalled());
+  });
+
+  test('touch move/resize a Floating Layer via drag, with no aspect-ratio lock', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = new Selection({ type: 'rect', x: 20, y: 20, w: 40, h: 40 });
+    await model.pasteIntoSelection(await create_solid_png_buffer(40, 40, BLACK));
+    const beginMoveSpy = vi.spyOn(model.selection, 'beginMove');
+    const applyDragSpy = vi.spyOn(model.selection, 'applyDrag');
+
+    dispatchTouchStart([{ clientX: 40, clientY: 40 }]); // center, clear of any handle
+    expect(beginMoveSpy).toHaveBeenCalledWith({ x: 40, y: 40 });
+    expect(controller.selectionDrag).toBeTruthy();
+
+    dispatchTouchMove([{ clientX: 50, clientY: 55 }]);
+    expect(applyDragSpy).toHaveBeenCalledWith({ x: 50, y: 55 }, false);
+
+    dispatchTouchEnd([{ clientX: 50, clientY: 55 }]);
+    expect(controller.selectionDrag).toBeNull();
+  });
+
+  test('multi-touch is ignored: a two-finger touchstart does not begin a drag', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+
+    dispatchTouchStart([{ clientX: 10, clientY: 10 }, { clientX: 50, clientY: 50 }]);
+
+    expect(controller.isSelecting).toBe(false);
+    expect(model.selection).toBeNull();
+  });
+
+  test('a two-finger touchmove does not act, even mid-drag', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    dispatchTouchStart([{ clientX: 10, clientY: 10 }]);
+
+    dispatchTouchMove([{ clientX: 20, clientY: 20 }, { clientX: 60, clientY: 60 }]);
+
+    expect(model.selection).toBeNull();
+  });
+
+  test('passes isTouch=true to view.hitTestHandle when routing a touchstart, and false for a mousedown', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = new Selection({ type: 'rect', x: 20, y: 20, w: 40, h: 40 });
+
+    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 40, clientY: 40 }));
+    expect(fakeView.hitTestHandle).toHaveBeenLastCalledWith({ x: 20, y: 20, w: 40, h: 40 }, { x: 40, y: 40 }, false);
+
+    dispatchTouchStart([{ clientX: 40, clientY: 40 }]);
+    expect(fakeView.hitTestHandle).toHaveBeenLastCalledWith({ x: 20, y: 20, w: 40, h: 40 }, { x: 40, y: 40 }, true);
+  });
+});
+
+describe('Alpha Color Picker toggle', () => {
+  function dispatchTouchStart(touches) {
+    const event = new Event('touchstart', { bubbles: true, cancelable: true });
+    event.touches = touches;
+    window.dispatchEvent(event);
+  }
+  function dispatchMouseDown(opts = {}) {
+    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
+  }
+
+  test('clicking the toggle button arms the picker, updates the view, and closes the mobile drawer', () => {
+    document.getElementById('drawer').classList.remove('hidden');
+    expect(controller.alphaPickArmed).toBe(false);
+
+    document.getElementById('alpha-pick-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(controller.alphaPickArmed).toBe(true);
+    expect(fakeView.setAlphaPickArmed).toHaveBeenCalledWith(true);
+    expect(document.getElementById('drawer').classList.contains('hidden')).toBe(true);
+  });
+
+  test('clicking again disarms it and also closes the drawer', () => {
+    document.getElementById('alpha-pick-btn').dispatchEvent(new Event('click', { bubbles: true }));
+    document.getElementById('drawer').classList.remove('hidden');
+
+    document.getElementById('alpha-pick-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(controller.alphaPickArmed).toBe(false);
+    expect(fakeView.setAlphaPickArmed).toHaveBeenLastCalledWith(false);
+    expect(document.getElementById('drawer').classList.contains('hidden')).toBe(true);
+  });
+
+  test('while armed, a plain touchstart on the Canvas samples the Alpha Key and disarms the picker', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE, BLACK));
+    controller.alphaPickArmed = true;
+
+    dispatchTouchStart([{ clientX: 0, clientY: 0 }]);
+
+    expect(model.alphaKey).toStrictEqual(BLACK);
+    expect(fakeView.setAlphaColor).toHaveBeenCalledWith(BLACK);
+    expect(controller.alphaPickArmed).toBe(false);
+    expect(fakeView.setAlphaPickArmed).toHaveBeenCalledWith(false);
+  });
+
+  test('while armed, a plain mousedown (no altKey held) also samples via the same path and disarms', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE, BLACK));
+    controller.alphaPickArmed = true;
+
+    dispatchMouseDown({ clientX: 0, clientY: 0 });
+
+    expect(model.alphaKey).toStrictEqual(BLACK);
+    expect(controller.alphaPickArmed).toBe(false);
+  });
+
+  test('auto-disarms after a sample - a second tap without re-arming falls through to a selection drag', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE, BLACK));
+    controller.alphaPickArmed = true;
+
+    dispatchTouchStart([{ clientX: 0, clientY: 0 }]);
+    expect(controller.alphaPickArmed).toBe(false);
+    expect(model.alphaKey).toStrictEqual(BLACK);
+
+    dispatchTouchStart([{ clientX: 10, clientY: 10 }]);
+
+    expect(model.alphaKey).toStrictEqual(BLACK); // unchanged - second tap wasn't a sample
+    expect(controller.isSelecting).toBe(true); // fell through to a normal selection drag instead
+  });
+
+  test('toggling off stops sampling on tap', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE, BLACK));
+    controller.alphaPickArmed = true;
+    document.getElementById('alpha-pick-btn').dispatchEvent(new Event('click', { bubbles: true }));
+    expect(controller.alphaPickArmed).toBe(false);
+
+    dispatchTouchStart([{ clientX: 0, clientY: 0 }]);
+
+    expect(model.alphaKey).toBeNull();
+    expect(controller.isSelecting).toBe(true); // fell through to a normal selection drag instead
+  });
+});
+
+describe('Paste button', () => {
+  function fakeClipboardReadItem(buffer, type = 'image/png') {
+    return { types: [type], getType: async () => new Blob([buffer], { type }) };
+  }
+
+  test('reads the clipboard and pastes the image on success', async () => {
+    const buffer = await create_solid_png_buffer(60, 40, WHITE);
+    navigator.clipboard.read.mockResolvedValueOnce([fakeClipboardReadItem(buffer)]);
+    const createNewSpy = vi.spyOn(model, 'createNew');
+
+    document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(createNewSpy).toHaveBeenCalled());
+    await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
+  });
+
+  test('falls back to the hidden file input when clipboard.read() rejects', async () => {
+    navigator.clipboard.read.mockRejectedValueOnce(new Error('denied'));
+    const input = document.getElementById('paste-file-input');
+    const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
+
+    document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(clickSpy).toHaveBeenCalled());
+  });
+
+  test('falls back to the file input when the clipboard has no image item', async () => {
+    navigator.clipboard.read.mockResolvedValueOnce([{ types: ['text/plain'], getType: async () => new Blob(['x']) }]);
+    const input = document.getElementById('paste-file-input');
+    const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
+
+    document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(clickSpy).toHaveBeenCalled());
+  });
+
+  test('a file chosen via the fallback input funnels into the same paste logic', async () => {
+    const buffer = await create_solid_png_buffer(60, 40, WHITE);
+    const file = new File([buffer], 'image.png', { type: 'image/png' });
+    const input = document.getElementById('paste-file-input');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    const createNewSpy = vi.spyOn(model, 'createNew');
+
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await vi.waitFor(() => expect(createNewSpy).toHaveBeenCalled());
+    await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
+  });
+});
+
+describe('Copy/Share button', () => {
+  test('does nothing when there is no pending blob and no floating layer', () => {
+    model.pendingCopyBlob = null;
+
+    document.getElementById('copy-share-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(navigator.clipboard.write).not.toHaveBeenCalled();
+  });
+
+  test('writes to the clipboard with a ClipboardItem when a blob is pending', async () => {
+    model.pendingCopyBlob = new Blob(['x'], { type: 'image/png' });
+
+    document.getElementById('copy-share-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(navigator.clipboard.write).toHaveBeenCalledWith([expect.any(ClipboardItem)]));
+  });
+
+  test('falls back to navigator.share with the same blob when clipboard.write() fails', async () => {
+    const blob = new Blob(['x'], { type: 'image/png' });
+    model.pendingCopyBlob = blob;
+    navigator.clipboard.write.mockRejectedValueOnce(new Error('unsupported'));
+
+    document.getElementById('copy-share-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(navigator.share).toHaveBeenCalled());
+    const [{ files }] = navigator.share.mock.calls[0];
+    expect(files[0].type).toBe('image/png');
+    expect(await files[0].arrayBuffer()).toStrictEqual(await blob.arrayBuffer());
+  });
+
+  test('does not throw when navigator.share is unsupported', async () => {
+    model.pendingCopyBlob = new Blob(['x'], { type: 'image/png' });
+    navigator.clipboard.write.mockRejectedValueOnce(new Error('unsupported'));
+    const originalShare = navigator.share;
+    navigator.share = undefined;
+
+    document.getElementById('copy-share-btn').dispatchEvent(new Event('click', { bubbles: true }));
+    await vi.waitFor(() => expect(navigator.clipboard.write).toHaveBeenCalled());
+
+    navigator.share = originalShare;
+  });
+
+  test('commits the floating layer first, then copies the now-updated canvas region', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
+    await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
+
+    document.getElementById('copy-share-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(model.hasFloatingLayer()).toBe(false));
+    expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(BLACK);
+    await vi.waitFor(() => expect(navigator.clipboard.write).toHaveBeenCalledWith([expect.any(ClipboardItem)]));
+  });
+});
+
+describe('Select All / Cancel / Undo / Redo buttons', () => {
+  test('select-all-btn selects the full image, updates the copy blob, and draws the selection', async () => {
+    await model.createNew(await create_solid_png_buffer(120, 80, WHITE));
+    const updateCopyBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+
+    document.getElementById('select-all-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.selection).toMatchObject({ type: 'rect', x: 0, y: 0, w: 120, h: 80 });
+    expect(updateCopyBlobSpy).toHaveBeenCalled();
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
+  });
+
+  test('select-all-btn does nothing on an empty model', () => {
+    document.getElementById('select-all-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.selection).toBeNull();
+  });
+
+  test('cancel-btn cancels the floating layer', async () => {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = new Selection({ type: 'rect', x: 50, y: 50, w: 100, h: 100 });
+    await model.pasteIntoSelection(await create_solid_png_buffer(100, 100, BLACK));
+
+    document.getElementById('cancel-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.hasFloatingLayer()).toBe(false);
+    expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
+  });
+
+  test('cancel-btn does nothing without a floating layer', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    const historyLengthBefore = model.history.length;
+
+    document.getElementById('cancel-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.history).toHaveLength(historyLengthBefore);
+  });
+
+  test('undo-btn undoes and re-renders', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    await model.createNew(await create_solid_png_buffer(110, 100, WHITE));
+
+    document.getElementById('undo-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.mainImage.width).toBe(100);
+    expect(fakeView.render).toHaveBeenCalled();
+  });
+
+  test('redo-btn redoes and re-renders', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    await model.createNew(await create_solid_png_buffer(110, 100, WHITE));
+    model.undo();
+    fakeView.render.mockClear();
+
+    document.getElementById('redo-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.mainImage.width).toBe(110);
+    expect(fakeView.render).toHaveBeenCalled();
+  });
+
+  test('undo-btn/redo-btn are suppressed while a floating layer is active', async () => {
+    await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    await model.createNew(await create_solid_png_buffer(110, 100, WHITE));
+    model.selection = new Selection({ type: 'rect', x: 0, y: 0, w: 50, h: 50 });
+    await model.pasteIntoSelection(await create_solid_png_buffer(50, 50, BLACK));
+    const historyBefore = [...model.history];
+
+    document.getElementById('undo-btn').dispatchEvent(new Event('click', { bubbles: true }));
+    document.getElementById('redo-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(model.history).toStrictEqual(historyBefore);
+    expect(model.hasFloatingLayer()).toBe(true);
   });
 });

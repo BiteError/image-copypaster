@@ -8,7 +8,8 @@ global.ClipboardItem = class ClipboardItem {
   }
 };
 
-global.navigator.clipboard = { write: vi.fn() };
+global.navigator.clipboard = { write: vi.fn(), read: vi.fn() };
+global.navigator.share = vi.fn();
 
 // jsdom has no real canvas backend, so it doesn't implement ImageData either
 // (contrary to the controller-view-tests PRD's assumption of "a real jsdom

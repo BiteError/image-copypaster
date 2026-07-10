@@ -6,7 +6,58 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Desktop and mobile are two independent DOM trees, not one shared markup block
+   reshuffled per breakpoint - only one of the two is ever displayed, switched below
+   by the pointer:coarse breakpoint (an input-capability check, not a viewport-width
+   one: a touch tablet always gets the mobile toolbar, a resized desktop window never
+   does). */
+#toolbar-desktop {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+#toolbar-mobile {
+  display: none;
+  width: 100%;
+  position: relative;
+}
+
+#primary-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+#drawer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 8px;
+  padding: 10px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3d3d3d;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+
+#drawer.hidden {
+  display: none;
 }
 
 #toolbar {
@@ -45,11 +96,13 @@ canvas {
   cursor: crosshair;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   image-rendering: pixelated;
+  touch-action: none;
 }
 
 #ui-layer {
   pointer-events: none;
   cursor: crosshair;
+  touch-action: none;
 }
 
 button {
@@ -181,4 +234,23 @@ kbd {
   border-radius: 3px;
   color: #fff;
   font-family: monospace;
+}
+
+@media (pointer: coarse) {
+  #toolbar-desktop {
+    display: none;
+  }
+
+  #toolbar-mobile {
+    display: flex;
+  }
+
+  #drawer-toggle-btn {
+    margin-left: auto;
+  }
+
+  button {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
 }

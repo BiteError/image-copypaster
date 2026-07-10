@@ -2,6 +2,7 @@ const SELECTION_COLOR = '#00ff00';
 const FLOATING_LAYER_COLOR = '#ff00ff'; // distinct from SELECTION_COLOR: signals "not yet committed"
 
 const HANDLE_SIZE = 8; // canvas px at zoom 1
+const TOUCH_HANDLE_SIZE = 36; // widened hit-test-only box for touch, visual size unchanged
 
 // Handle name -> normalized position within the bounding box (0=start edge, 1=end edge, 0.5=mid).
 const HANDLE_POSITIONS = {
@@ -21,13 +22,25 @@ export default class ImageView {
         this.uiCtx = this.uiCanvas.getContext('2d');
         this.zoom = 1;
 
+        // Several controls exist twice - once in the desktop toolbar, once in the
+        // mobile one - sharing a js- class so both stay in sync. The singular
+        // properties below keep pointing at the desktop instance specifically, since
+        // that's the one existing callers (and tests) read state back from.
         this.alphaColor = document.getElementById('alpha-color');
+        this.alphaColors = Array.from(document.querySelectorAll('.js-alpha-color'));
+
         this.transparencyToggle = document.getElementById('transparency-toggle');
-        this.transparencyToggle.checked = false;
+        this.transparencyToggles = Array.from(document.querySelectorAll('.js-transparency-toggle'));
+        this.transparencyToggles.forEach(el => el.checked = false);
+
         this.toleranceSlider = document.getElementById('tolerance-slider');
         this.shapeSlider = document.getElementById('shape-slider');
 
         this.shapeToggle = document.getElementById('shape-toggle-btn');
+        this.shapeToggles = Array.from(document.querySelectorAll('.js-shape-toggle'));
+
+        this.alphaPickBtn = document.getElementById('alpha-pick-btn');
+        this.alphaPickBtns = Array.from(document.querySelectorAll('.js-alpha-pick-btn'));
     }
 
     clearCanvas() {
@@ -93,8 +106,8 @@ export default class ImageView {
 
     // Bounding-box corners + edge midpoints, in canvas coordinates. Private: only
     // drawHandles and hitTestHandle need handle geometry.
-    #getHandleRects(bounds) {
-        const size = HANDLE_SIZE / this.zoom;
+    #getHandleRects(bounds, handleSize = HANDLE_SIZE) {
+        const size = handleSize / this.zoom;
         return Object.entries(HANDLE_POSITIONS).map(([type, [px, py]]) => ({
             type,
             x: bounds.x + bounds.w * px - size / 2,
@@ -104,9 +117,12 @@ export default class ImageView {
         }));
     }
 
-    // Used by the controller to hit-test a mousedown against a floating layer's handles.
-    hitTestHandle(bounds, coords) {
-        const hit = this.#getHandleRects(bounds)
+    // Used by the controller to hit-test a mousedown/touchstart against a floating
+    // layer's handles. isTouch widens the hit rectangle for a fingertip-sized target;
+    // the visual handle (drawHandles, HANDLE_SIZE) never changes.
+    hitTestHandle(bounds, coords, isTouch = false) {
+        const handleSize = isTouch ? TOUCH_HANDLE_SIZE : HANDLE_SIZE;
+        const hit = this.#getHandleRects(bounds, handleSize)
             .find(r => coords.x >= r.x && coords.x < r.x + r.w && coords.y >= r.y && coords.y < r.y + r.h);
         return hit ? hit.type : null;
     }
@@ -158,15 +174,22 @@ export default class ImageView {
     }
 
     setShapeMode(mode) {
-        this.shapeToggle.textContent = mode === 'ellipse' ? 'Shape: ⬭' : 'Shape: ▭';
-        this.shapeToggle.classList.toggle('active', mode === 'ellipse');
+        const icon = mode === 'ellipse' ? '◌' : '⛶';
+        this.shapeToggles.forEach(btn => {
+            btn.textContent = icon;
+            btn.classList.toggle('active', mode === 'ellipse');
+        });
+    }
+
+    setAlphaPickArmed(armed) {
+        this.alphaPickBtns.forEach(btn => btn.classList.toggle('active', armed));
     }
 
     setAlphaColor(color) {
-        const newColor = color ? 
+        const newColor = color ?
           `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)` : 'transparent';
 
-        this.alphaColor.style.background = newColor;
-        this.transparencyToggle.checked = !!color;
+        this.alphaColors.forEach(el => el.style.background = newColor);
+        this.transparencyToggles.forEach(el => el.checked = !!color);
     }
 }

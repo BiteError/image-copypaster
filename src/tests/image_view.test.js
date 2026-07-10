@@ -366,6 +366,16 @@ describe('hitTestHandle', () => {
     expect(view.hitTestHandle(bounds, { x: 1, y: 1 })).toBe('nw');
     expect(view.hitTestHandle(bounds, { x: 3, y: 3 })).toBeNull();
   });
+
+  test('isTouch widens the hit area to roughly 36px, without changing the visual HANDLE_SIZE', () => {
+    view.zoom = 1;
+    const bounds = { x: 10, y: 20, w: 30, h: 40 };
+
+    // a coordinate 6px off the nw center misses the 8px mouse box...
+    expect(view.hitTestHandle(bounds, { x: 16, y: 20 })).toBeNull();
+    // ...but lands inside the ~36px touch box at the same coordinate.
+    expect(view.hitTestHandle(bounds, { x: 16, y: 20 }, true)).toBe('nw');
+  });
 });
 
 describe('setShapeMode', () => {
@@ -374,14 +384,14 @@ describe('setShapeMode', () => {
 
     view.setShapeMode('rect');
 
-    expect(view.shapeToggle.textContent).toBe('Shape: ▭');
+    expect(view.shapeToggle.textContent).toBe('⛶');
     expect(view.shapeToggle.classList.contains('active')).toBe(false);
   });
 
   test('shows the ellipse symbol and sets the active class for ellipse mode', () => {
     view.setShapeMode('ellipse');
 
-    expect(view.shapeToggle.textContent).toBe('Shape: ⬭');
+    expect(view.shapeToggle.textContent).toBe('◌');
     expect(view.shapeToggle.classList.contains('active')).toBe(true);
   });
 });
