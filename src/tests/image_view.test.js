@@ -393,7 +393,7 @@ describe('setShapeMode', () => {
   test('shows the ellipse symbol and sets the active class for ellipse mode', () => {
     view.setShapeMode('ellipse');
 
-    expect(view.shapeToggle.textContent).toBe('◌');
+    expect(view.shapeToggle.textContent).toBe('◯');
     expect(view.shapeToggle.classList.contains('active')).toBe(true);
   });
 });

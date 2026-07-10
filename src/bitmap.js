@@ -4,8 +4,11 @@ import { Jimp } from 'jimp'
 // 0-100 tolerance slider onto make_color_transparent's raw distance argument.
 const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255);
 
+// Squared rather than linear: most usable tolerances are low (keying out AA
+// fringe, not swaths of unrelated color), so the low end of the slider is
+// stretched out for finer control while the high end compresses quickly.
 export function toleranceToDistance(tolerancePercent) {
-    return (tolerancePercent / 100) * MAX_RGB_DISTANCE;
+    return (tolerancePercent / 100) ** 2 * MAX_RGB_DISTANCE;
 }
 
 export async function CreateBitmap(blob) {

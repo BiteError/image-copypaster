@@ -180,7 +180,7 @@ export default class ImageView {
     }
 
     setShapeMode(mode) {
-        const icon = mode === 'ellipse' ? '◌' : '⛶';
+        const icon = mode === 'ellipse' ? '◯' : '⛶';
         this.shapeToggles.forEach(btn => {
             btn.textContent = icon;
             btn.classList.toggle('active', mode === 'ellipse');

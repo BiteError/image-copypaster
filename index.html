@@ -22,7 +22,7 @@
       <button class="js-copy-share-btn" id="copy-share-btn">Copy</button>
       <button class="js-flip-h-btn" id="flip-horizontally-btn" data-hint="Flip horizontally (H)" aria-label="Flip horizontally">⇉</button>
       <button class="js-flip-v-btn" id="flip-vertically-btn" data-hint="Flip vertically (V)" aria-label="Flip vertically">⇊</button>
-      <button class="js-rotate-btn" id="rotate-btn" data-hint="(R)" aria-label="Rotate">⤵︎</button>
+      <button class="js-rotate-btn" id="rotate-btn" data-hint="(R)" aria-label="Rotate">↻</button>
 
       <div class="toggle-group">
         <button class="js-shape-toggle" id="shape-toggle-btn" data-hint="(Space)" aria-label="Toggle selection shape">⛶</button>
@@ -32,7 +32,7 @@
       </div>
 
       <div class="toggle-group">
-        <span class="hint-wrap">
+        <span class="hint-wrap" data-hint="(Alt + Click on canvas)">
           <input class="js-transparency-toggle" type="checkbox" id="transparency-toggle">
         </span>
         <label for="transparency-toggle">Enable Alpha Paste</label>
@@ -69,20 +69,20 @@
       <div id="primary-bar">
         <button class="js-paste-btn" id="paste-btn-mobile">Paste</button>
         <button class="js-copy-share-btn" id="copy-share-btn-mobile">Copy</button>
-        <button id="undo-btn" aria-label="Undo">←</button>
-        <button id="redo-btn" aria-label="Redo">→</button>
         <button class="js-flip-v-btn" id="flip-vertically-btn-mobile" aria-label="Flip vertically">⇊</button>
         <button class="js-flip-h-btn" id="flip-horizontally-btn-mobile" aria-label="Flip horizontally">⇉</button>
-        <button class="js-rotate-btn" id="rotate-btn-mobile" aria-label="Rotate">⤵︎</button>
+        <button class="js-rotate-btn" id="rotate-btn-mobile" aria-label="Rotate">↻</button>
         <button class="js-shape-toggle" id="shape-toggle-btn-mobile" aria-label="Toggle selection shape">⛶</button>
         <button id="cancel-btn">Esc</button>
-        <button id="drawer-toggle-btn" aria-label="More tools">⋯</button>
+        <button id="undo-btn" aria-label="Undo">←</button>
+        <button id="redo-btn" aria-label="Redo">→</button>
+        <button id="help-btn-mobile" aria-label="Help">?</button>
+        <button id="drawer-toggle-btn" class="last-items" aria-label="More tools">⋯</button>
       </div>
 
       <div id="drawer" class="hidden">
         <button class="primary js-reset-btn" id="reset-btn-mobile" aria-label="Clear canvas">New</button>
         <button id="select-all-btn">Select All</button>
-        <button id="help-btn-mobile" aria-label="Help">?</button>
 
         <div class="toggle-group">
           <button class="js-shape-toggle" id="shape-toggle-btn-mobile-drawer" aria-label="Toggle selection shape">⛶</button>
@@ -104,8 +104,8 @@
           <li>Drag inside a selection to move it, drag a handle to resize</li>
           <li><kbd>←</kbd>/<kbd>→</kbd> Undo / Redo</li>
           <li><kbd>⇊</kbd>/<kbd>⇉</kbd> Flip selection</li>
-          <li><kbd>⤵︎</kbd> Rotate selection</li>
-          <li><kbd>⛶</kbd>/<kbd>◌</kbd> Toggle rect / ellipse shape</li>
+          <li><kbd>↻</kbd> Rotate selection</li>
+          <li><kbd>⛶</kbd>/<kbd>◯</kbd> Toggle rect / ellipse shape</li>
           <li><kbd>Esc</kbd> Cancel a pasted selection before committing it</li>
           <li><kbd>⋯</kbd> More tools: New, Select All, Roundness slider, Alpha Paste</li>
           <li>Tap <kbd>Pick 🎨</kbd>, then tap the image to set the alpha-color key</li>
