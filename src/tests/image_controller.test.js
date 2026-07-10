@@ -63,23 +63,30 @@ function dispatchCopy() {
   return event;
 }
 
+function makeFakeBus() {
+  return { report: vi.fn() };
+}
+
 // Constructed once for the whole file (see PRD decision 6): initListeners
 // registers window-level listeners with no teardown, so a fresh controller
 // per test would accumulate stale listeners firing against later state.
-let controller, model, fakeView;
+let controller, model, fakeView, fakeBus;
 
 beforeAll(() => {
   mountFixture();
   model = new ImageModel();
   fakeView = makeFakeView();
-  controller = new ImageController(model, fakeView);
+  fakeBus = makeFakeBus();
+  controller = new ImageController(model, fakeView, fakeBus);
 });
 
 beforeEach(() => {
   model = new ImageModel();
   fakeView = makeFakeView();
+  fakeBus = makeFakeBus();
   controller.model = model;
   controller.view = fakeView;
+  controller.bus = fakeBus;
   controller.isSelecting = false;
   controller.alphaPickArmed = false;
   navigator.clipboard.write.mockClear();
@@ -1398,6 +1405,7 @@ describe('Paste button', () => {
     document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
 
     await vi.waitFor(() => expect(clickSpy).toHaveBeenCalled());
+    expect(fakeBus.report).toHaveBeenCalledWith('warning', expect.any(String), expect.any(Error));
   });
 
   test('falls back to the file input when the clipboard has no image item', async () => {
@@ -1408,6 +1416,7 @@ describe('Paste button', () => {
     document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
 
     await vi.waitFor(() => expect(clickSpy).toHaveBeenCalled());
+    expect(fakeBus.report).toHaveBeenCalledWith('warning', expect.any(String), expect.any(Error));
   });
 
   test('a file chosen via the fallback input funnels into the same paste logic', async () => {
@@ -1421,6 +1430,26 @@ describe('Paste button', () => {
 
     await vi.waitFor(() => expect(createNewSpy).toHaveBeenCalled());
     await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
+  });
+
+  test('a Model failure with no fallback path dispatches an error-level report and does not render', async () => {
+    const buffer = await create_solid_png_buffer(60, 40, WHITE);
+    navigator.clipboard.read.mockResolvedValueOnce([fakeClipboardReadItem(buffer)]);
+    const modelError = new Error('Jimp decode failed');
+    vi.spyOn(model, 'createNew').mockRejectedValueOnce(modelError);
+    const input = document.getElementById('paste-file-input');
+    // input.click is a shared spy re-wrapped across tests in this file (the fixture is
+    // mounted once in beforeAll, never remounted) - clear its call history from earlier
+    // tests before asserting a negative here.
+    const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
+    clickSpy.mockClear();
+
+    document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(fakeBus.report).toHaveBeenCalledWith('error', expect.any(String), modelError));
+    expect(fakeView.render).not.toHaveBeenCalled();
+    // the clipboard-read catch must not also fire the file-picker fallback for a Model-side failure
+    expect(clickSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -1452,6 +1481,7 @@ describe('Copy/Share button', () => {
     const [{ files }] = navigator.share.mock.calls[0];
     expect(files[0].type).toBe('image/png');
     expect(await files[0].arrayBuffer()).toStrictEqual(await blob.arrayBuffer());
+    expect(fakeBus.report).toHaveBeenCalledWith('warning', expect.any(String), expect.any(Error));
   });
 
   test('does not throw when navigator.share is unsupported', async () => {

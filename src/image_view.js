@@ -1,3 +1,5 @@
+import { meetsThreshold, parseDebugConfig } from './error_bus.js';
+
 const SELECTION_COLOR = '#00ff00';
 const FLOATING_LAYER_COLOR = '#ff00ff'; // distinct from SELECTION_COLOR: signals "not yet committed"
 
@@ -15,12 +17,16 @@ const HANDLE_POSITIONS = {
  * VIEW: DOM/Canvas interaction
  */
 export default class ImageView {
-    constructor() {
+    constructor(bus, debugConfig = parseDebugConfig(window.location.search)) {
         this.imgCanvas = document.getElementById('image-canvas');
         this.uiCanvas = document.getElementById('ui-layer');
         this.imgCtx = this.imgCanvas.getContext('2d');
         this.uiCtx = this.uiCanvas.getContext('2d');
         this.zoom = 1;
+
+        this.toastContainer = document.getElementById('toast-container');
+        this.debugConfig = debugConfig;
+        bus.addEventListener('report', e => this.handleReport(e.detail));
 
         // Several controls exist twice - once in the desktop toolbar, once in the
         // mobile one - sharing a js- class so both stay in sync. The singular
@@ -191,5 +197,51 @@ export default class ImageView {
 
         this.alphaColors.forEach(el => el.style.background = newColor);
         this.transparencyToggles.forEach(el => el.checked = !!color);
+    }
+
+    handleReport({ level, message, detail }) {
+        if (!meetsThreshold(level, this.debugConfig.logLevel)) return;
+        this.showToast(level, message, detail);
+    }
+
+    showToast(level, message, detail) {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${level}`;
+
+        const text = document.createElement('span');
+        text.className = 'toast-message';
+        // At the lowest log_level threshold, a developer wants the raw error over the
+        // friendly one-liner. stack_trace then appends the full stack on top of that
+        // (rather than duplicating the raw message before it, since the stack already
+        // starts with it).
+        const showRaw = this.debugConfig.logLevel === 'debug' && detail;
+        const baseMessage = showRaw ? this.rawMessage(detail) : message;
+        text.textContent = this.debugConfig.stackTrace && detail
+            ? (showRaw ? this.detailToText(detail) : `${baseMessage}\n${this.detailToText(detail)}`)
+            : baseMessage;
+        toast.appendChild(text);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'toast-close';
+        closeBtn.setAttribute('aria-label', 'Dismiss');
+        closeBtn.textContent = '×';
+        closeBtn.addEventListener('click', () => toast.remove());
+        toast.appendChild(closeBtn);
+
+        this.toastContainer.appendChild(toast);
+
+        if (this.debugConfig.stackTrace && detail) {
+            console.error(detail);
+        }
+    }
+
+    detailToText(detail) {
+        if (detail instanceof Error) return detail.stack || detail.message;
+        return String(detail);
+    }
+
+    rawMessage(detail) {
+        if (detail instanceof Error) return detail.message;
+        return String(detail);
     }
 }

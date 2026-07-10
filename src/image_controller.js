@@ -2,14 +2,16 @@
  * CONTROLLER: Orchestrates View and Model
  */
 export default class ImageController {
-    constructor(model, view) {
+    constructor(model, view, bus) {
         this.model = model;
         this.view = view;
+        this.bus = bus;
         this.isSelecting = false;
         this.startPos = { x: 0, y: 0 };
         this.selectionDrag = null; // truthy while dragging a selection's move/resize gesture
         this.alphaPickArmed = false; // touch equivalent of holding Alt: auto-disarms after one sample
         this.toolbar = document.getElementById('toolbar');
+        this.toastContainer = document.getElementById('toast-container');
 
         this.initListeners();
         this.view.setShapeMode(this.model.shapeMode);
@@ -102,10 +104,15 @@ export default class ImageController {
             await this.model.commitFloatingLayer();
         }
 
-        if (this.model.selection) {
-            await this.model.pasteIntoSelection(buffer);
-        } else {
-            await this.model.createNew(buffer);
+        try {
+            if (this.model.selection) {
+                await this.model.pasteIntoSelection(buffer);
+            } else {
+                await this.model.createNew(buffer);
+            }
+        } catch (err) {
+            this.bus.report('error', "Couldn't paste image", err);
+            return;
         }
         this.render_view();
     }
@@ -125,6 +132,7 @@ export default class ImageController {
             const buffer = await blob.arrayBuffer();
             await this.pasteBuffer(buffer);
         } catch (err) {
+            this.bus.report('warning', "Couldn't read the clipboard, opening file picker instead", err);
             document.getElementById('paste-file-input').click();
         }
     }
@@ -171,6 +179,7 @@ export default class ImageController {
         try {
             await navigator.clipboard.write([item]);
         } catch (err) {
+            this.bus.report('warning', "Couldn't copy to clipboard, opening share sheet instead", err);
             if (!navigator.share) return;
             const file = new File([this.model.pendingCopyBlob], 'image.png', { type: 'image/png' });
             await navigator.share({ files: [file] });
@@ -340,11 +349,18 @@ export default class ImageController {
         };
     }
 
+    // True for touches/clicks landing on chrome that owns its own interactions
+    // (toolbar buttons, toast dismiss) rather than the canvas.
+    isChromeTarget(target) {
+        return target instanceof Node &&
+            (this.toolbar.contains(target) || this.toastContainer.contains(target));
+    }
+
     async handleMouseDown(e) {
         // mousedown/mouseup are bound on window (not scoped to the canvas), so toolbar
         // clicks bubble through here too. Bail out before touching any selection/floating
         // state so a toolbar click's own click handler still runs normally afterward.
-        if (e.target instanceof Node && this.toolbar.contains(e.target)) return;
+        if (this.isChromeTarget(e.target)) return;
 
         if (this.model.isEmpty()) return;
 
@@ -366,8 +382,10 @@ export default class ImageController {
     }
 
     async handleTouchStart(e) {
-        // Mirrors handleMouseDown's toolbar bail-out.
-        if (e.target instanceof Node && this.toolbar.contains(e.target)) return;
+        // Mirrors handleMouseDown's chrome bail-out. Critical for touch: the
+        // preventDefault() below suppresses the synthesized click on chrome buttons
+        // (e.g. a toast's close button) if we don't bail out before reaching it.
+        if (this.isChromeTarget(e.target)) return;
 
         // Ignore multi-touch entirely (no preventDefault), leaving room for a future
         // pinch-zoom feature to claim the second finger.

@@ -2,6 +2,7 @@
 import { expect, test, describe, beforeEach, afterEach, vi } from 'vitest'
 import ImageView from '../image_view.js'
 import Selection from '../selection.js'
+import ErrorBus from '../error_bus.js'
 import { mountFixtureWithCanvasStub } from './dom_helpers.js'
 import { create_test_bitmap, create_solid_bitmap } from './test_helpers.js'
 
@@ -23,11 +24,12 @@ function stubWindowSize(width, height) {
   vi.stubGlobal('innerHeight', height);
 }
 
-let view, imgCtx, uiCtx;
+let view, imgCtx, uiCtx, bus;
 
 beforeEach(() => {
   ({ imgCtx, uiCtx } = mountFixtureWithCanvasStub());
-  view = new ImageView();
+  bus = new ErrorBus();
+  view = new ImageView(bus);
 });
 
 afterEach(() => {
@@ -445,5 +447,130 @@ describe('toImageData', () => {
     expect(imageData.width).toBe(bitmap.width);
     expect(imageData.height).toBe(bitmap.height);
     expect(Array.from(imageData.data)).toStrictEqual(Array.from(bitmap.data()));
+  });
+});
+
+describe('error toasts', () => {
+  function toasts() {
+    return Array.from(document.querySelectorAll('#toast-container .toast'));
+  }
+
+  // the default (unconfigured) view built in beforeEach uses the real default
+  // debugConfig: log_level=error, stack_trace disabled.
+  test('an error-level report renders a toast with the friendly message', () => {
+    bus.report('error', "Couldn't paste image", new Error('boom'));
+
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0].querySelector('.toast-message').textContent).toBe("Couldn't paste image");
+  });
+
+  test('the toast carries a severity-specific class', () => {
+    bus.report('error', 'something failed');
+
+    expect(toasts()[0].classList.contains('toast-error')).toBe(true);
+  });
+
+  test('a warning-level report is hidden by default (below the error threshold)', () => {
+    bus.report('warning', 'fallback engaged');
+
+    expect(toasts()).toHaveLength(0);
+  });
+
+  test('raising log_level to warning reveals warning-level reports', () => {
+    const warnBus = new ErrorBus();
+    new ImageView(warnBus, { logLevel: 'warning', stackTrace: false });
+
+    warnBus.report('warning', 'fallback engaged');
+
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0].classList.contains('toast-warning')).toBe(true);
+  });
+
+  test('each report gets its own toast, stacking multiple at once', () => {
+    bus.report('error', 'first failure');
+    bus.report('error', 'second failure');
+
+    expect(toasts()).toHaveLength(2);
+    expect(toasts()[0].querySelector('.toast-message').textContent).toBe('first failure');
+    expect(toasts()[1].querySelector('.toast-message').textContent).toBe('second failure');
+  });
+
+  test('every toast has a close button that removes only that toast when clicked', () => {
+    bus.report('error', 'first failure');
+    bus.report('error', 'second failure');
+
+    toasts()[0].querySelector('.toast-close').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0].querySelector('.toast-message').textContent).toBe('second failure');
+  });
+
+  test('stack-trace detail is omitted from the message when stack_trace is disabled', () => {
+    bus.report('error', "Couldn't paste image", new Error('boom'));
+
+    expect(toasts()[0].querySelector('.toast-message').textContent).toBe("Couldn't paste image");
+  });
+
+  test('stack-trace detail is appended to the toast when stack_trace is enabled', () => {
+    const detailBus = new ErrorBus();
+    new ImageView(detailBus, { logLevel: 'error', stackTrace: true });
+    const err = new Error('boom');
+
+    detailBus.report('error', "Couldn't paste image", err);
+
+    expect(toasts()[0].querySelector('.toast-message').textContent).toContain("Couldn't paste image");
+    expect(toasts()[0].querySelector('.toast-message').textContent).toContain(err.stack);
+  });
+
+  test('stack_trace also console.errors the raw detail object', () => {
+    const detailBus = new ErrorBus();
+    new ImageView(detailBus, { logLevel: 'error', stackTrace: true });
+    const err = new Error('boom');
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    detailBus.report('error', "Couldn't paste image", err);
+
+    expect(consoleSpy).toHaveBeenCalledWith(err);
+    consoleSpy.mockRestore();
+  });
+
+  test('stack_trace works independently of log_level, revealing detail on an already-visible error toast', () => {
+    const detailBus = new ErrorBus();
+    new ImageView(detailBus, { logLevel: 'error', stackTrace: true });
+
+    detailBus.report('warning', 'fallback engaged', new Error('nope'));
+    detailBus.report('error', 'real failure', new Error('boom'));
+
+    // warning stays hidden (log_level still 'error'); only the error-level toast shows, with detail appended
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0].querySelector('.toast-message').textContent).toContain('real failure');
+  });
+
+  test('at log_level=debug, the raw error message replaces the friendly one', () => {
+    const debugBus = new ErrorBus();
+    new ImageView(debugBus, { logLevel: 'debug', stackTrace: false });
+
+    debugBus.report('error', "Couldn't paste image", new Error('Jimp decode failed'));
+
+    expect(toasts()[0].querySelector('.toast-message').textContent).toBe('Jimp decode failed');
+  });
+
+  test('at log_level=debug, a report with no detail still falls back to the friendly message', () => {
+    const debugBus = new ErrorBus();
+    new ImageView(debugBus, { logLevel: 'debug', stackTrace: false });
+
+    debugBus.report('info', 'no image on clipboard');
+
+    expect(toasts()[0].querySelector('.toast-message').textContent).toBe('no image on clipboard');
+  });
+
+  test('at log_level=debug with stack_trace enabled, the toast shows the stack without duplicating the raw message', () => {
+    const debugBus = new ErrorBus();
+    new ImageView(debugBus, { logLevel: 'debug', stackTrace: true });
+    const err = new Error('Jimp decode failed');
+
+    debugBus.report('error', "Couldn't paste image", err);
+
+    expect(toasts()[0].querySelector('.toast-message').textContent).toBe(err.stack);
   });
 });
