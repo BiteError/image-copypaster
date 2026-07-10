@@ -7,6 +7,11 @@ body {
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  /* Strip pinch-zoom and double-tap-zoom page-wide. touch-action resolves by
+     ancestor intersection, so pan-x pan-y here removes zoom from every descendant
+     (the letterbox and toolbar) while leaving single-finger pan intact for scrollable
+     regions like the toast stack. The canvas keeps its own touch-action: none. */
+  touch-action: pan-x pan-y;
 }
 
 .hidden {

@@ -43,6 +43,12 @@ export default class ImageController {
         window.addEventListener('touchstart', e => this.handleTouchStart(e), { passive: false });
         window.addEventListener('touchmove', e => this.handleTouchMove(e), { passive: false });
         window.addEventListener('touchend', e => this.handleTouchEnd(e), { passive: false });
+        // iOS Safari ignores maximum-scale/user-scalable and has historically been flaky
+        // about honoring touch-action for pinch, so block its two-finger zoom gestures
+        // directly. These are Safari-only events fired only on multi-finger pinch; the
+        // selection drag is strictly single-finger, so this takes away nothing we use.
+        window.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+        window.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
 
         // Controls that exist once per toolbar (desktop and mobile) share a js- class,
         // so wiring the class once binds both instances to the same handler.
