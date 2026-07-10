@@ -11,5 +11,32 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "deny": [
+      "Read(**/.env*)",
+      "Read(**/secrets/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Bash(sudo *)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git push --force *)",
+      "Bash(gh pr merge:*)"
+    ],
+    "ask":[
+      "Bash(rm -rf *)",
+      "WebFetch"
+    ],
+    "allow":[
+      "Bash(git status)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run dev:*)",
+      "Read(./**)",
+      "Edit(./**)"
+    ]
   }
 }
