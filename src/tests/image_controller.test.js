@@ -1397,32 +1397,69 @@ describe('Paste button', () => {
     await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
   });
 
-  test('falls back to the hidden file input when clipboard.read() rejects', async () => {
+  test('warns to copy an image, without opening the file picker, when clipboard.read() rejects', async () => {
     navigator.clipboard.read.mockRejectedValueOnce(new Error('denied'));
-    const input = document.getElementById('paste-file-input');
+    const input = document.getElementById('file-input');
     const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
+    clickSpy.mockClear();
 
     document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
 
-    await vi.waitFor(() => expect(clickSpy).toHaveBeenCalled());
-    expect(fakeBus.report).toHaveBeenCalledWith('warning', expect.any(String), expect.any(Error));
+    await vi.waitFor(() => expect(fakeBus.report).toHaveBeenCalledWith('warning', expect.any(String), expect.any(Error)));
+    expect(clickSpy).not.toHaveBeenCalled();
   });
 
-  test('falls back to the file input when the clipboard has no image item', async () => {
+  test('warns to copy an image when the clipboard has no image item', async () => {
     navigator.clipboard.read.mockResolvedValueOnce([{ types: ['text/plain'], getType: async () => new Blob(['x']) }]);
-    const input = document.getElementById('paste-file-input');
+    const input = document.getElementById('file-input');
     const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
+    clickSpy.mockClear();
 
     document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
 
-    await vi.waitFor(() => expect(clickSpy).toHaveBeenCalled());
-    expect(fakeBus.report).toHaveBeenCalledWith('warning', expect.any(String), expect.any(Error));
+    await vi.waitFor(() => expect(fakeBus.report).toHaveBeenCalledWith('warning', expect.any(String), expect.any(Error)));
+    expect(clickSpy).not.toHaveBeenCalled();
   });
 
-  test('a file chosen via the fallback input funnels into the same paste logic', async () => {
+  test('stays silent (no report) when the Clipboard read API is unavailable', async () => {
+    const original = navigator.clipboard;
+    navigator.clipboard = { write: vi.fn() }; // no read - simulates an insecure context
+
+    document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(fakeBus.report).not.toHaveBeenCalled();
+    navigator.clipboard = original;
+  });
+
+  test('a Model failure dispatches an error-level report and does not render', async () => {
+    const buffer = await create_solid_png_buffer(60, 40, WHITE);
+    navigator.clipboard.read.mockResolvedValueOnce([fakeClipboardReadItem(buffer)]);
+    const modelError = new Error('Jimp decode failed');
+    vi.spyOn(model, 'createNew').mockRejectedValueOnce(modelError);
+
+    document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(fakeBus.report).toHaveBeenCalledWith('error', expect.any(String), modelError));
+    expect(fakeView.render).not.toHaveBeenCalled();
+  });
+});
+
+describe('Open button', () => {
+  test('opens the file picker on click', () => {
+    const input = document.getElementById('file-input');
+    const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
+    clickSpy.mockClear();
+
+    document.getElementById('open-btn').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  test('a chosen file funnels into the same paste logic', async () => {
     const buffer = await create_solid_png_buffer(60, 40, WHITE);
     const file = new File([buffer], 'image.png', { type: 'image/png' });
-    const input = document.getElementById('paste-file-input');
+    const input = document.getElementById('file-input');
     Object.defineProperty(input, 'files', { value: [file], configurable: true });
     const createNewSpy = vi.spyOn(model, 'createNew');
 
@@ -1430,26 +1467,6 @@ describe('Paste button', () => {
 
     await vi.waitFor(() => expect(createNewSpy).toHaveBeenCalled());
     await vi.waitFor(() => expect(fakeView.render).toHaveBeenCalled());
-  });
-
-  test('a Model failure with no fallback path dispatches an error-level report and does not render', async () => {
-    const buffer = await create_solid_png_buffer(60, 40, WHITE);
-    navigator.clipboard.read.mockResolvedValueOnce([fakeClipboardReadItem(buffer)]);
-    const modelError = new Error('Jimp decode failed');
-    vi.spyOn(model, 'createNew').mockRejectedValueOnce(modelError);
-    const input = document.getElementById('paste-file-input');
-    // input.click is a shared spy re-wrapped across tests in this file (the fixture is
-    // mounted once in beforeAll, never remounted) - clear its call history from earlier
-    // tests before asserting a negative here.
-    const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
-    clickSpy.mockClear();
-
-    document.getElementById('paste-btn').dispatchEvent(new Event('click', { bubbles: true }));
-
-    await vi.waitFor(() => expect(fakeBus.report).toHaveBeenCalledWith('error', expect.any(String), modelError));
-    expect(fakeView.render).not.toHaveBeenCalled();
-    // the clipboard-read catch must not also fire the file-picker fallback for a Model-side failure
-    expect(clickSpy).not.toHaveBeenCalled();
   });
 });
 

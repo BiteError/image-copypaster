@@ -47,16 +47,22 @@ export default class ImageView {
 
         this.alphaPickBtn = document.getElementById('alpha-pick-btn');
         this.alphaPickBtns = Array.from(document.querySelectorAll('.js-alpha-pick-btn'));
+
+        // Shown over the blank canvas whenever it's empty, hidden as soon as an image
+        // lands; the only cue telling a first-time user how to get started.
+        this.emptyPrompt = document.getElementById('empty-prompt');
     }
 
     clearCanvas() {
         this.imgCtx.clearRect(0, 0, this.imgCanvas.width, this.imgCanvas.height);
         this.zoom = 1;
         this.resize(300, 150);
+        this.setEmptyPrompt(true);
     }
 
     render(bitmap, selection, alphaKey, colorTolerance, shapeExponent) {
         if (!bitmap) return;
+        this.setEmptyPrompt(false);
         const width = bitmap.width;
         const height = bitmap.height;
 
@@ -177,6 +183,10 @@ export default class ImageView {
             if (i === 0) this.uiCtx.moveTo(px, py);
             else this.uiCtx.lineTo(px, py);
         }
+    }
+
+    setEmptyPrompt(visible) {
+        if (this.emptyPrompt) this.emptyPrompt.classList.toggle('hidden', !visible);
     }
 
     setShapeMode(mode) {

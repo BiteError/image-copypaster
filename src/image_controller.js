@@ -55,11 +55,12 @@ export default class ImageController {
         this.bindAll('.js-rotate-btn', 'click', () => this.handleManipulate('rotateCW'));
         this.bindAll('.js-shape-toggle', 'click', () => this.toggleShapeMode());
         this.bindAll('.js-alpha-pick-btn', 'click', () => this.toggleAlphaPick());
+        this.bindAll('.js-open-btn', 'click', () => this.handleOpenButton());
         this.bindAll('.js-paste-btn', 'click', async () => this.handlePasteButton());
         this.bindAll('.js-copy-share-btn', 'click', () => this.handleCopyShareButton());
 
-        document.getElementById('paste-file-input')
-            .addEventListener('change', e => this.handlePasteFileInput(e));
+        document.getElementById('file-input')
+            .addEventListener('change', e => this.handleFileInput(e));
         document.getElementById('select-all-btn')
             .addEventListener('click', () => this.handleSelectAllButton());
         document.getElementById('cancel-btn')
@@ -96,7 +97,7 @@ export default class ImageController {
     }
 
     // Shared by Cmd/Ctrl+V (handlePaste), the Paste button's clipboard.read() path, and
-    // its file-picker fallback - one entry point into the same
+    // the Open button's file input - one entry point into the same
     // commit-then-paste-into-selection-or-createNew Model logic regardless of how the
     // image bytes arrived.
     async pasteBuffer(buffer) {
@@ -117,12 +118,28 @@ export default class ImageController {
         this.render_view();
     }
 
+    // Open button: the explicit file-picker path, distinct from Paste. Routes the
+    // chosen file through the same pasteBuffer logic (commit-then-paste-into-selection-
+    // or-createNew), so opening a file into an active Selection works exactly like a
+    // Paste does.
+    handleOpenButton() {
+        document.getElementById('file-input').click();
+    }
+
     // Paste button: reads the system clipboard directly (must be called synchronously
     // from the click handler, inside the tap's transient user-activation window - no
-    // await may precede it). Falls back to a hidden file input when the Clipboard API
-    // is unavailable/unsupported or the read is rejected (e.g. no permission, no image
-    // on the clipboard).
+    // await may precede it). Clipboard-only - the file-picker lives on its own Open
+    // button now. Two distinct failure modes:
+    //   1. The async Clipboard read API only exists in a secure context; over plain
+    //      http (local dev) navigator.clipboard is absent. That's a dev-environment
+    //      concern the user can't fix by copying something, so stay silent (console only).
+    //   2. In a secure context the read can still yield no image (empty clipboard,
+    //      permission denied) - prompt the user to copy an image first.
     async handlePasteButton() {
+        if (!navigator.clipboard?.read) {
+            console.warn('Clipboard read API unavailable (insecure context?)');
+            return;
+        }
         try {
             const items = await navigator.clipboard.read();
             const item = items.find(i => i.types.some(t => t.startsWith('image/')));
@@ -132,12 +149,11 @@ export default class ImageController {
             const buffer = await blob.arrayBuffer();
             await this.pasteBuffer(buffer);
         } catch (err) {
-            this.bus.report('warning', "Couldn't read the clipboard, opening file picker instead", err);
-            document.getElementById('paste-file-input').click();
+            this.bus.report('warning', 'Nothing to paste — copy an image first.', err);
         }
     }
 
-    async handlePasteFileInput(e) {
+    async handleFileInput(e) {
         const file = e.target.files[0];
         e.target.value = ''; // allow re-selecting the same file next time
         if (!file) return;

@@ -18,6 +18,7 @@
     <!-- Desktop toolbar: a single always-visible row, hidden entirely on coarse pointers. -->
     <div id="toolbar-desktop">
       <button class="primary js-reset-btn" id="reset-btn" aria-label="Clear canvas">New</button>
+      <button class="js-open-btn" id="open-btn">Open</button>
       <button class="js-paste-btn" id="paste-btn">Paste</button>
       <button class="js-copy-share-btn" id="copy-share-btn">Copy</button>
       <button class="js-flip-h-btn" id="flip-horizontally-btn" data-hint="Flip horizontally (H)" aria-label="Flip horizontally">⇉</button>
@@ -67,6 +68,7 @@
          panel for less-frequently-used controls. Hidden entirely on fine pointers. -->
     <div id="toolbar-mobile">
       <div id="primary-bar">
+        <button class="js-open-btn" id="open-btn-mobile" aria-label="Open file">📁</button>
         <button class="js-paste-btn" id="paste-btn-mobile">Paste</button>
         <button class="js-copy-share-btn" id="copy-share-btn-mobile">Copy</button>
         <button class="js-flip-v-btn" id="flip-vertically-btn-mobile" aria-label="Flip vertically">⇊</button>
@@ -114,11 +116,12 @@
     </div>
   </div>
 
-  <input type="file" id="paste-file-input" accept="image/*" class="hidden" aria-hidden="true">
+  <input type="file" id="file-input" accept="image/*" class="hidden" aria-hidden="true">
 
   <div id="container">
     <canvas id="image-canvas"></canvas>
     <canvas id="ui-layer"></canvas>
+    <p id="empty-prompt">Open a file or paste an image to get started.</p>
   </div>
 
   <div id="toast-container" role="status" aria-live="polite"></div>
