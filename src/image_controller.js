@@ -241,17 +241,9 @@ export default class ImageController {
                 this.view.drawSelection(this.model.selection, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
             }
         }
-        // Cancel the floating layer
-        else if (e.key === 'Escape' && this.model.hasFloatingLayer()) {
-            this.model.cancelFloatingLayer();
-            this.render_view();
-            this.closeHelpPanel();
-        }
-        // Deselect
+        // Cancel the floating layer, or deselect if none is floating
         else if (e.key === 'Escape') {
-            this.isSelecting = false;
-            this.model.selection = null;
-            this.view.drawSelection(null);
+            this.handleEscape();
             this.closeHelpPanel();
         }
         // Toggle selection shape
@@ -592,8 +584,8 @@ export default class ImageController {
     }
 
     // Select All / Cancel / Undo / Redo buttons: on-screen equivalents of the
-    // Cmd/Ctrl+A, Escape-with-floating-layer, Cmd/Ctrl+Z, and Cmd/Ctrl+Shift+Z branches
-    // in handleKeyDown, mirrored almost verbatim.
+    // Cmd/Ctrl+A, Escape, Cmd/Ctrl+Z, and Cmd/Ctrl+Shift+Z branches in
+    // handleKeyDown, mirrored almost verbatim.
     handleSelectAllButton() {
         if (this.model.isEmpty()) return;
         this.model.selectAll();
@@ -602,9 +594,21 @@ export default class ImageController {
     }
 
     handleCancelButton() {
-        if (!this.model.hasFloatingLayer()) return;
-        this.model.cancelFloatingLayer();
-        this.render_view();
+        this.handleEscape();
+    }
+
+    // The Escape action: cancel an active Floating Layer, otherwise clear the
+    // Selection. Shared by the keyboard Escape branch and the mobile Esc button
+    // so both behave identically.
+    handleEscape() {
+        if (this.model.hasFloatingLayer()) {
+            this.model.cancelFloatingLayer();
+            this.render_view();
+        } else {
+            this.isSelecting = false;
+            this.model.selection = null;
+            this.view.drawSelection(null);
+        }
     }
 
     // Suppressed while a Floating Layer is active, matching the existing keyboard behavior.

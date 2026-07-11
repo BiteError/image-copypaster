@@ -1556,12 +1556,15 @@ describe('Select All / Cancel / Undo / Redo buttons', () => {
     expect(model.mainImage.pixel_color(50, 50)).toStrictEqual(WHITE);
   });
 
-  test('cancel-btn does nothing without a floating layer', async () => {
+  test('cancel-btn clears the selection when no floating layer, like keyboard Escape', async () => {
     await model.createNew(await create_solid_png_buffer(100, 100, WHITE));
+    model.selection = new Selection({ type: 'rect', x: 10, y: 10, w: 30, h: 30 });
     const historyLengthBefore = model.history.length;
 
     document.getElementById('cancel-btn').dispatchEvent(new Event('click', { bubbles: true }));
 
+    expect(model.selection).toBeNull();
+    expect(fakeView.drawSelection).toHaveBeenLastCalledWith(null);
     expect(model.history).toHaveLength(historyLengthBefore);
   });
 
