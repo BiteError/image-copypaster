@@ -349,14 +349,17 @@ export default class ImageController {
     }
 
     async toggleShapeMode() {
-        if (this.model.hasFloatingLayer()) {
-            await this.commitFloating();
-        }
         this.model.shapeMode = this.model.shapeMode === 'ellipse' ? 'rect' : 'ellipse';
         if (this.model.selection) {
+            // Re-shape in place. On a floating layer this re-masks its pixels
+            // non-destructively (preview() masks off selection.type) rather than
+            // committing it; on a plain selection it just re-outlines.
             this.model.setSelectionShape(this.model.shapeMode);
             this.view.drawSelection(this.model.selection, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
-            if (!this.isSelecting) {
+            // A floating layer's copy blob is regenerated from real pixels at Copy
+            // time (Copy commits first); refreshing it here would read mainImage
+            // under the layer, which is meaningless.
+            if (!this.isSelecting && !this.model.hasFloatingLayer()) {
                 await this.model.updateCopyBlob();
             }
         }

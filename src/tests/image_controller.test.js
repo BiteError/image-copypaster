@@ -885,15 +885,16 @@ describe('floating layer commit triggers', () => {
     await model.pasteIntoSelection(await create_solid_png_buffer(w, h, BLACK));
   }
 
-  test('switching tools (shape toggle) commits the floating layer first', async () => {
+  test('shape toggle re-shapes the floating layer in place instead of committing it', async () => {
     await setupFloatingLayer();
 
     document.getElementById('shape-toggle-btn').dispatchEvent(new Event('click', { bubbles: true }));
 
     await vi.waitFor(() => expect(fakeView.setShapeMode).toHaveBeenCalledWith('ellipse'));
-    expect(model.hasFloatingLayer()).toBe(false);
-    expect(model.mainImage.pixel_color(30, 30)).toStrictEqual(BLACK);
-    expect(model.shapeMode).toBe('ellipse'); // the toggle itself still happened
+    expect(model.hasFloatingLayer()).toBe(true); // still floating, not committed
+    expect(model.selection.type).toBe('ellipse'); // the new shape applied to it
+    expect(model.mainImage.pixel_color(30, 30)).toStrictEqual(WHITE); // mainImage untouched
+    expect(model.shapeMode).toBe('ellipse'); // the default for the next selection flipped too
   });
 });
 

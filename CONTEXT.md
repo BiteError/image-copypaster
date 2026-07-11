@@ -21,7 +21,7 @@ Insert an image from the system clipboard. With no Selection, the pasted image b
 _Avoid_: import, insert
 
 **Floating Layer**:
-The state a Selection enters once a Paste gives it pixel content, non-destructive and uncommitted. Holds its original bitmap untouched alongside position, size, rotation, and flip transform parameters; every render re-derives the displayed pixels from the original bitmap rather than baking transforms in, so repeated adjustment never compounds quality loss. Shares the Selection's Shape for masking and outline. Only one can exist at a time — it must Commit or Cancel before another Paste can start.
+The state a Selection enters once a Paste gives it pixel content, non-destructive and uncommitted. Holds its original bitmap untouched alongside position, size, rotation, and flip transform parameters; every render re-derives the displayed pixels from the original bitmap rather than baking transforms in, so repeated adjustment never compounds quality loss. Shares the Selection's Shape for masking and outline; switching Shape while it exists re-masks it in place, non-destructively (re-derived from the original bitmap), rather than committing it. Only one can exist at a time — it must Commit or Cancel before another Paste can start.
 _Avoid_: preview layer, pending paste, staged image
 
 **Handle**:
@@ -29,7 +29,7 @@ One of eight small squares (four corners, four edge midpoints) rendered around a
 _Avoid_: grip, anchor
 
 **Commit**:
-Bake a Floating Layer's current transform into the Canvas at its current position/size, then clear the Floating Layer — the same composite-and-save-history path a destructive Paste used to follow directly. Triggered by Enter, clicking outside the Floating Layer, starting a new Selection or Paste elsewhere, switching Shape, or Copy (which always commits first so it reads the same composited pixels everything else sees).
+Bake a Floating Layer's current transform into the Canvas at its current position/size, then clear the Floating Layer — the same composite-and-save-history path a destructive Paste used to follow directly. Triggered by Enter, clicking outside the Floating Layer, starting a new Selection or Paste elsewhere, or Copy (which always commits first so it reads the same composited pixels everything else sees). Switching Shape does _not_ commit — it re-masks the Floating Layer in place (see Floating Layer).
 _Avoid_: apply, finalize, bake
 
 **Cancel**:
