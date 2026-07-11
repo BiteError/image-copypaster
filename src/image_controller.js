@@ -527,6 +527,10 @@ export default class ImageController {
         if (this.selectionDrag) {
             this.model.selection.endDrag();
             this.selectionDrag = null;
+            
+            if (!this.model.hasFloatingLayer()) {
+                await this.model.updateCopyBlob();
+            }
             return;
         }
 

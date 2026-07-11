@@ -855,6 +855,21 @@ describe('floating layer move & resize (routing)', () => {
     expect(controller.selectionDrag).toBeNull();
   });
 
+  test('ending a floating-layer drag does NOT refresh the copy blob', async () => {
+    await setupFloatingLayer();
+    dispatchMouseDown({ clientX: 40, clientY: 40 }); // move gesture
+    const updateBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+    const endDragSpy = vi.spyOn(model.selection, 'endDrag');
+
+    dispatchMouseUp();
+
+    // The blob for a floating layer is regenerated from real pixels at Copy time
+    // (Copy commits first); cropping mainImage under the layer here would be
+    // meaningless, so drag-end must leave it alone.
+    await vi.waitFor(() => expect(endDragSpy).toHaveBeenCalled());
+    expect(updateBlobSpy).not.toHaveBeenCalled();
+  });
+
   test('mousedown outside the box commits the floating layer, then starts a normal selection drag from there', async () => {
     await setupFloatingLayer();
 
@@ -878,6 +893,58 @@ describe('floating layer move & resize (routing)', () => {
     dispatchMouseMove({ clientX: 170, clientY: 180 });
 
     expect(model.selection).toMatchObject({ type: 'rect', x: 150, y: 150, w: 20, h: 30 });
+  });
+});
+
+describe('marquee move/resize refreshes the copy blob at drag-end', () => {
+  function dispatchMouseDown(opts = {}) {
+    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
+  }
+  function dispatchMouseMove(opts = {}) {
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, ...opts }));
+  }
+  function dispatchMouseUp() {
+    window.dispatchEvent(new Event('mouseup'));
+  }
+
+  // A plain marquee (no `original`), as opposed to a floating layer.
+  async function setupMarquee(x = 20, y = 20, w = 40, h = 40) {
+    await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
+    model.selection = new Selection({ type: 'rect', x, y, w, h });
+  }
+
+  test('resizing a marquee refreshes the copy blob once, at drag-end, after endDrag settles the new bounds', async () => {
+    await setupMarquee(); // box x20 y20 w40 h40 -> se handle at (60,60)
+    const updateBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+    const endDragSpy = vi.spyOn(model.selection, 'endDrag');
+
+    dispatchMouseDown({ clientX: 60, clientY: 60 }); // grab se handle
+    dispatchMouseMove({ clientX: 80, clientY: 80 }); // drag it out to resize
+
+    // Mid-drag redraws only the overlay - it must NOT re-encode the blob every move
+    // (that regression is what janked large images; see 9aaacb4).
+    expect(updateBlobSpy).not.toHaveBeenCalled();
+
+    dispatchMouseUp();
+
+    await vi.waitFor(() => expect(updateBlobSpy).toHaveBeenCalledTimes(1));
+    // Refreshed after endDrag, so the blob reflects the resized bounds rather than the
+    // pre-resize pixels - the bug this fix closes.
+    expect(endDragSpy.mock.invocationCallOrder[0])
+      .toBeLessThan(updateBlobSpy.mock.invocationCallOrder[0]);
+  });
+
+  test('moving a marquee refreshes the copy blob at drag-end', async () => {
+    await setupMarquee(); // center at (40,40)
+    const updateBlobSpy = vi.spyOn(model, 'updateCopyBlob');
+
+    dispatchMouseDown({ clientX: 40, clientY: 40 }); // grab inside -> move
+    dispatchMouseMove({ clientX: 60, clientY: 60 }); // shift the selection
+    expect(updateBlobSpy).not.toHaveBeenCalled();
+
+    dispatchMouseUp();
+
+    await vi.waitFor(() => expect(updateBlobSpy).toHaveBeenCalledTimes(1));
   });
 });
 

@@ -32,6 +32,7 @@
       "Bash(git status)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
+      "Bash(git log:*)",
       "Bash(npm run lint:*)",
       "Bash(npm run test:*)",
       "Bash(npm run dev:*)",
