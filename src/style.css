@@ -116,11 +116,13 @@ canvas {
   left: 50%;
   transform: translate(-50%, -50%);
   margin: 0;
-  padding: 0 24px;
-  max-width: 90%;
+  padding: 12px 20px;
+  max-width: min(90%, 280px);
   text-align: center;
-  color: #888;
+  color: #ccc;
   font-size: 15px;
+  background: rgba(17, 17, 17, 0.82);
+  border-radius: 8px;
   pointer-events: none;
   user-select: none;
 }
