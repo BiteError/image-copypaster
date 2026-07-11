@@ -494,7 +494,11 @@ export default class ImageController {
     handlePointerMove(coords, lockAspect) {
         if (this.selectionDrag) {
             this.model.selection.applyDrag(coords, lockAspect);
-            this.render_view();
+            // A move/resize never touches mainImage - only the overlay (outline, handles,
+            // floating preview) shifts. Redraw just the ui-layer instead of a full
+            // render_view(), which would re-upload the entire main image every pointer
+            // move and jank the drag on large images (esp. mobile).
+            this.view.drawSelection(this.model.selection, this.model.alphaKey, this.model.colorTolerance, this.model.shapeExponent);
             return;
         }
 

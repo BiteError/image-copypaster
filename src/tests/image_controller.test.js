@@ -838,7 +838,10 @@ describe('floating layer move & resize (routing)', () => {
     dispatchMouseMove({ clientX: 50, clientY: 55, shiftKey: true });
 
     expect(applyDragSpy).toHaveBeenCalledWith({ x: 50, y: 55 }, true);
-    expect(fakeView.render).toHaveBeenCalled();
+    // A move redraws only the overlay, not the whole main image (which is unchanged) -
+    // a full render_view() every pointer move janks the drag on large images.
+    expect(fakeView.render).not.toHaveBeenCalled();
+    expect(fakeView.drawSelection).toHaveBeenCalledWith(model.selection, model.alphaKey, model.colorTolerance, model.shapeExponent);
   });
 
   test('mouseup ends the drag', async () => {

@@ -17,6 +17,8 @@ const HANDLE_POSITIONS = {
  * VIEW: DOM/Canvas interaction
  */
 export default class ImageView {
+    #lastOverlayRect = null; // canvas-pixel region drawn by the last drawSelection, for dirty-rect clears
+
     constructor(bus, debugConfig = parseDebugConfig(window.location.search)) {
         this.imgCanvas = document.getElementById('image-canvas');
         this.uiCanvas = document.getElementById('ui-layer');
@@ -102,7 +104,11 @@ export default class ImageView {
     }
 
     drawSelection(sel, alphaKey, colorTolerance, shapeExponent = 2) {
-        this.uiCtx.clearRect(0, 0, this.uiCanvas.width, this.uiCanvas.height);
+        // Clear only the region the previous overlay touched (unioned with the one we're
+        // about to draw) rather than the whole ui-layer. The backing store is full image
+        // resolution, so a full clearRect every pointer move is O(image) and janks
+        // selection drags on large images / mobile; this keeps it O(selection).
+        this.#clearOverlay(sel);
 
         if (!sel) return;
 
@@ -114,6 +120,30 @@ export default class ImageView {
             this.strokeOutline(sel.type, sel.x, sel.y, sel.w, sel.h, SELECTION_COLOR, shapeExponent);
         }
         this.drawHandles(sel);
+        this.#lastOverlayRect = this.#overlayDirtyRect(sel);
+    }
+
+    // Canvas-pixel region a selection's overlay occupies, padded to cover the handle
+    // boxes and stroke width that extend past the bounds.
+    #overlayDirtyRect(sel) {
+        const pad = (HANDLE_SIZE + 4) / this.zoom;
+        return { x: sel.x - pad, y: sel.y - pad, w: sel.w + pad * 2, h: sel.h + pad * 2 };
+    }
+
+    #clearOverlay(sel) {
+        const rects = [this.#lastOverlayRect, sel && this.#overlayDirtyRect(sel)].filter(Boolean);
+        // Nothing tracked and nothing to draw (first paint, or clearing an already-empty
+        // overlay): fall back to a full clear so any untracked content is wiped.
+        if (rects.length === 0) {
+            this.uiCtx.clearRect(0, 0, this.uiCanvas.width, this.uiCanvas.height);
+        } else {
+            const minX = Math.min(...rects.map(r => r.x));
+            const minY = Math.min(...rects.map(r => r.y));
+            const maxX = Math.max(...rects.map(r => r.x + r.w));
+            const maxY = Math.max(...rects.map(r => r.y + r.h));
+            this.uiCtx.clearRect(minX, minY, maxX - minX, maxY - minY);
+        }
+        if (!sel) this.#lastOverlayRect = null;
     }
 
     // Bounding-box corners + edge midpoints, in canvas coordinates. Private: only

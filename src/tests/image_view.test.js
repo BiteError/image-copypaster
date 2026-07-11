@@ -19,6 +19,14 @@ async function makeFloating(x = 20, y = 20, w = 40, h = 40, type = 'rect') {
   return sel;
 }
 
+// drawSelection clears only a dirty rect around the selection (not the whole ui-layer).
+// Assert some clearRect call fully covers the selection's bounds.
+function expectClearCovers(ctx, sel) {
+  const covered = ctx.clearRect.mock.calls.some(([cx, cy, cw, ch]) =>
+    cx <= sel.x && cy <= sel.y && cx + cw >= sel.x + sel.w && cy + ch >= sel.y + sel.h);
+  expect(covered).toBe(true);
+}
+
 function stubWindowSize(width, height) {
   vi.stubGlobal('innerWidth', width);
   vi.stubGlobal('innerHeight', height);
@@ -238,7 +246,9 @@ describe('drawSelection', () => {
 
     view.drawSelection(sel);
 
-    expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
+    // Dirty-rect clear: covers the selection bounds (+ handle/stroke padding), not the
+    // whole full-resolution ui-layer.
+    expectClearCovers(uiCtx, sel);
     expect(outlineSpy).toHaveBeenCalledWith('rect', 10, 20, 30, 40, '#00ff00', 2);
     expect(uiCtx.strokeRect).toHaveBeenCalledWith(10, 20, 30, 40);
     expect(uiCtx.ellipse).not.toHaveBeenCalled();
@@ -261,7 +271,7 @@ describe('drawSelection', () => {
 
     view.drawSelection(sel);
 
-    expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
+    expectClearCovers(uiCtx, sel);
     expect(outlineSpy).toHaveBeenCalledWith('ellipse', 10, 20, 30, 40, '#00ff00', 2);
     // no native canvas primitive for a superellipse - the outline is traced as a polyline,
     // starting at the rightmost point of the bounding ellipse (center + (rx, 0))
@@ -296,7 +306,7 @@ describe('drawSelection', () => {
 
       view.drawSelection(floating);
 
-      expect(uiCtx.clearRect).toHaveBeenCalledWith(0, 0, view.uiCanvas.width, view.uiCanvas.height);
+      expectClearCovers(uiCtx, floating);
       const [imageData, x, y] = uiCtx.putImageData.mock.calls[0];
       expect(imageData.width).toBe(40);
       expect(x).toBe(5);
