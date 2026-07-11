@@ -87,6 +87,12 @@ body {
   justify-content: center;
   padding: 40px;
   background: #111;
+  /* Kill native drag-selection over the canvas region: a mouse drag paints the
+     browser's selection highlight and can drag the canvas as an image ghost,
+     since handleMouseDown doesn't preventDefault. Scoped here (not on body) so
+     toolbar text and toasts stay selectable. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 canvas {
@@ -102,6 +108,7 @@ canvas {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   image-rendering: pixelated;
   touch-action: none;
+  -webkit-user-drag: none;
 }
 
 #ui-layer {
