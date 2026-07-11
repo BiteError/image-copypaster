@@ -17,16 +17,21 @@
   <div id="toolbar">
     <!-- Desktop toolbar: a single always-visible row, hidden entirely on coarse pointers. -->
     <div id="toolbar-desktop">
-      <button class="primary js-reset-btn" id="reset-btn" aria-label="Clear canvas">New</button>
-      <button class="js-open-btn" id="open-btn">Open</button>
-      <button class="js-paste-btn" id="paste-btn">Paste</button>
-      <button class="js-copy-share-btn" id="copy-share-btn">Copy</button>
-      <button class="js-flip-h-btn" id="flip-horizontally-btn" data-hint="Flip horizontally (H)" aria-label="Flip horizontally">⇉</button>
-      <button class="js-flip-v-btn" id="flip-vertically-btn" data-hint="Flip vertically (V)" aria-label="Flip vertically">⇊</button>
-      <button class="js-rotate-btn" id="rotate-btn" data-hint="(R)" aria-label="Rotate">↻</button>
+      <button class="primary js-reset-btn" id="reset-btn" data-hint="Clear all" aria-label="Clear canvas">New</button>
+      <button class="js-open-btn" id="open-btn" data-hint="Open an image file">Open</button>
+      <button class="js-paste-btn" id="paste-btn" data-hint="Paste image (⌘/Ctrl+V)">Paste</button>
+      <button class="js-copy-share-btn" id="copy-share-btn" data-hint="Copy selection to clipboard (⌘/Ctrl+C)">Copy</button>
+      <button class="js-flip-h-btn" id="flip-horizontally-btn" data-hint="Flip selection horizontally (H)" aria-label="Flip horizontally">⇉</button>
+      <button class="js-flip-v-btn" id="flip-vertically-btn" data-hint="Flip selection vertically (V)" aria-label="Flip vertically">⇊</button>
+      <button class="js-rotate-btn" id="rotate-btn" data-hint="Rotate selection 90° (R)" aria-label="Rotate">↻</button>
 
       <div class="toggle-group">
-        <button class="js-shape-toggle" id="shape-toggle-btn" data-hint="(Space)" aria-label="Toggle selection shape">⛶</button>
+        <button class="js-undo-btn" id="undo-btn-desktop" data-hint="Undo (⌘/Ctrl+Z)" aria-label="Undo">↶</button>
+        <button class="js-redo-btn" id="redo-btn-desktop" data-hint="Redo (⌘/Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+      </div>
+
+      <div class="toggle-group">
+        <button class="js-shape-toggle" id="shape-toggle-btn" data-hint="Toggle selection shape (Space)" aria-label="Toggle selection shape">⛶</button>
         <span class="hint-wrap" data-hint="Roundness: 2">
           <input class="js-shape-slider" type="range" id="shape-slider" min="1" max="8" step="0.1" value="2">
         </span>
@@ -37,7 +42,7 @@
           <input class="js-transparency-toggle" type="checkbox" id="transparency-toggle">
         </span>
         <label for="transparency-toggle">Enable Alpha Paste</label>
-        <button class="js-alpha-pick-btn" id="alpha-pick-btn" aria-label="Pick Alpha Key by tapping the canvas" data-hint="(Click on canvas)">Pick 🎨</button>
+        <button class="js-alpha-pick-btn" id="alpha-pick-btn" aria-label="Pick Alpha Key by tapping the canvas" data-hint="Pick alpha color (Click on canvas)">Pick 🎨</button>
         <span class="hint-wrap" data-hint="Selected alpha-color">
           <div class="alpha-color js-alpha-color" id="alpha-color" style="background: transparent;"></div>        
         </span>
@@ -46,21 +51,29 @@
         </span>
       </div>
 
-      <button id="help-btn" aria-label="Keyboard shortcuts">?</button>
+      <button id="help-btn" data-hint="Help" aria-label="Help">?</button>
 
-      <div class="help-panel hidden" id="help-panel" role="dialog" aria-label="Keyboard shortcuts">
+      <div class="help-panel hidden" id="help-panel" role="dialog" aria-label="Help">
         <ul>
           <li><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd> Copy</li>
           <li><kbd>⌘/Ctrl</kbd>+<kbd>V</kbd> Paste</li>
           <li><kbd>⌘/Ctrl</kbd>+<kbd>A</kbd> Select all</li>
+          <li></li>
           <li><kbd>H</kbd>/<kbd>V</kbd> Flip</li>
-          <li><kbd>R</kbd> Rotate</li>
+          <li><kbd>R</kbd>/<kbd>Shift</kbd>+<kbd>R</kbd> Rotate (right/left)</li>
           <li><kbd>Space</kbd> Toggle shape</li>
+          <li></li>
           <li><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd> Undo</li>
+
+          <li><kbd>⌘/Ctrl</kbd>+<kbd>Y</kbd> Redo</li>
           <li><kbd>⌘/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo</li>
+          <li></li>
           <li><kbd>⌥/Alt</kbd>+<kbd>Click</kbd> on image to choose and</li>
-          <li>enable alpha-color (disable with <kbd>Shift</kbd>)</li>
+          <li>enable alpha-color</li>
+          <li><kbd>Shift</kbd>+<kbd>⌥/Alt</kbd>+<kbd>Click</kbd> on image to</li>
+          <li>disable alpha-color</li>
         </ul>
+        <p class="help-note">Paste or Open fills the active selection; with no selection it drops the image as a new canvas.</p>
       </div>
     </div>
 
@@ -76,8 +89,8 @@
         <button class="js-rotate-btn" id="rotate-btn-mobile" aria-label="Rotate">↻</button>
         <button class="js-shape-toggle" id="shape-toggle-btn-mobile" aria-label="Toggle selection shape">⛶</button>
         <button id="cancel-btn">Esc</button>
-        <button id="undo-btn" aria-label="Undo">←</button>
-        <button id="redo-btn" aria-label="Redo">→</button>
+        <button class="js-undo-btn" id="undo-btn" aria-label="Undo">↶</button>
+        <button class="js-redo-btn" id="redo-btn" aria-label="Redo">↷</button>
         <button id="help-btn-mobile" aria-label="Help">?</button>
         <button id="drawer-toggle-btn" class="last-items" aria-label="More tools">⋯</button>
       </div>
@@ -101,17 +114,19 @@
       </div>
 
       <div class="help-panel hidden" id="help-panel-mobile" role="dialog" aria-label="Help">
-        <ul>
-          <li>Drag on the canvas to select an area</li>
-          <li>Drag inside a selection to move it, drag a handle to resize</li>
-          <li><kbd>←</kbd>/<kbd>→</kbd> Undo / Redo</li>
-          <li><kbd>⇊</kbd>/<kbd>⇉</kbd> Flip selection</li>
-          <li><kbd>↻</kbd> Rotate selection</li>
-          <li><kbd>⛶</kbd>/<kbd>◯</kbd> Toggle rect / ellipse shape</li>
-          <li><kbd>Esc</kbd> Cancel a pasted selection before committing it, or clear the current selection</li>
-          <li><kbd>⋯</kbd> More tools: New, Select All, Roundness slider, Alpha Paste</li>
-          <li>Tap <kbd>Pick 🎨</kbd>, then tap the image to set the alpha-color key</li>
-        </ul>
+        <div class="help-panel-content">
+          <ul>
+            <li>Drag on the canvas to select an area</li>
+            <li>Drag inside a selection to move it, drag a handle to resize</li>
+            <li><kbd>↶</kbd>/<kbd>↷</kbd> Undo / Redo</li>
+            <li><kbd>⇊</kbd>/<kbd>⇉</kbd> Flip selection</li>
+            <li><kbd>↻</kbd> Rotate selection</li>
+            <li><kbd>⛶</kbd>/<kbd>◯</kbd> Toggle rect / ellipse shape</li>
+            <li><kbd>Esc</kbd> Cancel a pasted selection before committing it, or clear the current selection</li>
+            <li><kbd>⋯</kbd> More tools: New, Select All, Roundness slider, Alpha Paste</li>
+            <li>Tap <kbd>Pick 🎨</kbd>, then tap the image to set the alpha-color key</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>

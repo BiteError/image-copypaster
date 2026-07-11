@@ -2,7 +2,7 @@ body {
   margin: 0;
   background: #1a1a1a;
   color: #ececec;
-  font-family: sans-serif;
+  font-family: monospace;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -141,6 +141,7 @@ button {
   color: white;
   border: 1px solid #555;
   border-radius: 4px;
+  font-family: inherit;
   font-size: 12px;
   position: relative;
 }
@@ -235,6 +236,20 @@ button[data-hint]:focus-visible::after,
   white-space: nowrap;
 }
 
+#alpha-pick-btn-mobile {
+  white-space: nowrap;
+}
+
+.help-note {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #444;
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #bbb;
+}
+
 .alpha-color {
   width: 20px;
   height: 20px;
@@ -262,7 +277,8 @@ kbd {
   padding: 2px 4px;
   border-radius: 3px;
   color: #fff;
-  font-family: monospace;
+  font-family: inherit;
+  white-space: nowrap;
 }
 
 #toast-container {
@@ -334,12 +350,51 @@ kbd {
     display: flex;
   }
 
-  #drawer-toggle-btn {
+  #help-btn-mobile {
     margin-left: auto;
   }
 
   button {
     padding: 10px 14px;
     font-size: 14px;
+  }
+
+  /* The mobile help panel becomes a centered modal: the panel itself is a
+     fullscreen dimmed backdrop, and .help-panel-content is the actual card,
+     sized to fit the viewport with its own scroll so long lines never
+     overflow off-screen. */
+  #help-panel-mobile {
+    position: fixed;
+    inset: 0;
+    top: 0;
+    right: auto;
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    padding: 20px;
+  }
+
+  #help-panel-mobile.hidden {
+    display: none;
+  }
+
+  #help-panel-mobile .help-panel-content {
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 14px 18px;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  #help-panel-mobile li {
+    white-space: normal;
   }
 }

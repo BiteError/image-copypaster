@@ -63,6 +63,18 @@ function dispatchCopy() {
   return event;
 }
 
+function dispatchMouseDown(opts = {}) {
+  window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
+}
+
+function dispatchMouseMove(opts = {}) {
+  window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, ...opts }));
+}
+
+function dispatchMouseUp() {
+  window.dispatchEvent(new Event('mouseup'));
+}
+
 function makeFakeBus() {
   return { report: vi.fn() };
 }
@@ -543,10 +555,6 @@ describe('getCanvasCoords', () => {
 });
 
 describe('handleMouseDown', () => {
-  function dispatchMouseDown(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
-  }
-
   test('no-ops entirely when the model is empty', () => {
     dispatchMouseDown({ clientX: 0, clientY: 0 });
 
@@ -672,10 +680,6 @@ describe('handleMouseDown', () => {
 });
 
 describe('handleMouseMove', () => {
-  function dispatchMouseMove(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, ...opts }));
-  }
-
   test('no-ops when not selecting', () => {
     dispatchMouseMove({ clientX: 5, clientY: 5 });
 
@@ -695,10 +699,6 @@ describe('handleMouseMove', () => {
 });
 
 describe('handleMouseUp', () => {
-  function dispatchMouseUp() {
-    window.dispatchEvent(new Event('mouseup'));
-  }
-
   test('collapses a zero-width/height drag back to selection = null', async () => {
     controller.isSelecting = true;
     model.selection = new Selection({ x: 10, y: 10, w: 0, h: 5 });
@@ -721,16 +721,6 @@ describe('handleMouseUp', () => {
 });
 
 describe('marquee selection move & resize (new: handles now exist before any paste)', () => {
-  function dispatchMouseDown(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
-  }
-  function dispatchMouseMove(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, ...opts }));
-  }
-  function dispatchMouseUp() {
-    window.dispatchEvent(new Event('mouseup'));
-  }
-
   async function setupMarqueeSelection(x = 20, y = 20, w = 40, h = 40) {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
     model.selection = new Selection({ type: 'rect', x, y, w, h });
@@ -790,16 +780,6 @@ describe('marquee selection move & resize (new: handles now exist before any pas
 });
 
 describe('floating layer move & resize (routing)', () => {
-  function dispatchMouseDown(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
-  }
-  function dispatchMouseMove(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, ...opts }));
-  }
-  function dispatchMouseUp() {
-    window.dispatchEvent(new Event('mouseup'));
-  }
-
   async function setupFloatingLayer(x = 20, y = 20, w = 40, h = 40) {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
     model.selection = new Selection({ type: 'rect', x, y, w, h });
@@ -897,16 +877,6 @@ describe('floating layer move & resize (routing)', () => {
 });
 
 describe('marquee move/resize refreshes the copy blob at drag-end', () => {
-  function dispatchMouseDown(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
-  }
-  function dispatchMouseMove(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, ...opts }));
-  }
-  function dispatchMouseUp() {
-    window.dispatchEvent(new Event('mouseup'));
-  }
-
   // A plain marquee (no `original`), as opposed to a floating layer.
   async function setupMarquee(x = 20, y = 20, w = 40, h = 40) {
     await model.createNew(await create_solid_png_buffer(200, 200, WHITE));
@@ -1369,6 +1339,72 @@ describe('touch support', () => {
     dispatchTouchStart([{ clientX: 40, clientY: 40 }]);
     expect(fakeView.hitTestHandle).toHaveBeenLastCalledWith({ x: 20, y: 20, w: 40, h: 40 }, { x: 40, y: 40 }, true);
   });
+
+  // WebKit (iOS Safari, DuckDuckGo) doesn't fire a bubbling click for taps on the
+  // non-interactive modal, so dismissal has to run off touchend instead.
+  test('a tap on the open mobile help-panel closes it via touchend', () => {
+    document.getElementById('help-btn-mobile').dispatchEvent(new Event('click', { bubbles: true }));
+    const panel = document.getElementById('help-panel-mobile');
+    expect(panel.classList.contains('hidden')).toBe(false);
+
+    const event = new Event('touchend', { bubbles: true, cancelable: true });
+    event.changedTouches = [{ clientX: 40, clientY: 50 }];
+    event.touches = [];
+    panel.dispatchEvent(event);
+
+    expect(panel.classList.contains('hidden')).toBe(true);
+  });
+
+  test('a tap on the help button does not close-then-reopen the panel via touchend', () => {
+    document.getElementById('help-btn-mobile').dispatchEvent(new Event('click', { bubbles: true }));
+    const panel = document.getElementById('help-panel-mobile');
+    expect(panel.classList.contains('hidden')).toBe(false);
+
+    // touchend on the button itself must be a no-op here - the button's own
+    // click handler owns the close, so we'd double-toggle back open otherwise.
+    const event = new Event('touchend', { bubbles: true, cancelable: true });
+    event.changedTouches = [{ clientX: 0, clientY: 0 }];
+    event.touches = [];
+    document.getElementById('help-btn-mobile').dispatchEvent(event);
+
+    expect(panel.classList.contains('hidden')).toBe(false);
+  });
+
+  // iOS ignores maximum-scale/user-scalable and honors touch-action only flakily, so
+  // the touch handlers must preventDefault even when they bail out of gesture handling,
+  // or a double-tap on these regions zooms the page. (The DOM - unlike model/controller
+  // state - isn't reset between tests, so drive the help-panel class explicitly.)
+  test('a touchstart on the empty canvas preventDefaults to block double-tap zoom', () => {
+    document.getElementById('help-panel-mobile').classList.add('hidden');
+    expect(model.isEmpty()).toBe(true);
+
+    const event = dispatchTouchStart([{ clientX: 10, clientY: 20 }]);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(controller.isSelecting).toBe(false);
+  });
+
+  test('a touchstart on the open help modal preventDefaults to block double-tap zoom', () => {
+    const panel = document.getElementById('help-panel-mobile');
+    panel.classList.remove('hidden');
+
+    const event = new Event('touchstart', { bubbles: true, cancelable: true });
+    event.touches = [{ clientX: 40, clientY: 50 }];
+    panel.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  test('a touchstart on the help button while the modal is open does not preventDefault', () => {
+    document.getElementById('help-panel-mobile').classList.remove('hidden');
+
+    // The button owns its own toggle-click; preventDefaulting here would swallow it.
+    const event = new Event('touchstart', { bubbles: true, cancelable: true });
+    event.touches = [{ clientX: 0, clientY: 0 }];
+    document.getElementById('help-btn-mobile').dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
 });
 
 describe('Alpha Color Picker toggle', () => {
@@ -1376,9 +1412,6 @@ describe('Alpha Color Picker toggle', () => {
     const event = new Event('touchstart', { bubbles: true, cancelable: true });
     event.touches = touches;
     window.dispatchEvent(event);
-  }
-  function dispatchMouseDown(opts = {}) {
-    window.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...opts }));
   }
 
   test('clicking the toggle button arms the picker, updates the view, and closes the mobile drawer', () => {

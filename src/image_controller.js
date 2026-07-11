@@ -59,6 +59,8 @@ export default class ImageController {
         this.bindAll('.js-flip-h-btn', 'click', () => this.handleManipulate('flipH'));
         this.bindAll('.js-flip-v-btn', 'click', () => this.handleManipulate('flipV'));
         this.bindAll('.js-rotate-btn', 'click', () => this.handleManipulate('rotateCW'));
+        this.bindAll('.js-undo-btn', 'click', () => this.handleUndoButton());
+        this.bindAll('.js-redo-btn', 'click', () => this.handleRedoButton());
         this.bindAll('.js-shape-toggle', 'click', () => this.toggleShapeMode());
         this.bindAll('.js-alpha-pick-btn', 'click', () => this.toggleAlphaPick());
         this.bindAll('.js-open-btn', 'click', () => this.handleOpenButton());
@@ -71,10 +73,6 @@ export default class ImageController {
             .addEventListener('click', () => this.handleSelectAllButton());
         document.getElementById('cancel-btn')
             .addEventListener('click', () => this.handleCancelButton());
-        document.getElementById('undo-btn')
-            .addEventListener('click', () => this.handleUndoButton());
-        document.getElementById('redo-btn')
-            .addEventListener('click', () => this.handleRedoButton());
         document.getElementById('drawer-toggle-btn')
             .addEventListener('click', () => this.toggleDrawer());
         window.addEventListener('click', e => this.handleOutsideDrawerClick(e));
@@ -305,11 +303,17 @@ export default class ImageController {
         this.closeHelpPanel();
     }
 
+    // On mobile the panel is a fullscreen modal whose content card is read-only
+    // (no buttons/links to protect from accidental dismissal), and on short
+    // viewports the card can fill nearly the whole screen, leaving little to no
+    // dimmed backdrop to tap. So any tap while it's open closes it - content
+    // included - except the help button itself, which already toggles it.
+    // Touch devices dismiss via handleTouchEnd (WebKit doesn't fire a bubbling
+    // click for these taps); this click handler is the fallback for pointer
+    // input that never produces touch events.
     handleOutsideHelpClickMobile(e) {
-        const panel = document.getElementById('help-panel-mobile');
-        const helpBtn = document.getElementById('help-btn-mobile');
-        if (panel.classList.contains('hidden')) return;
-        if (panel.contains(e.target) || helpBtn.contains(e.target)) return;
+        if (!this.isMobileHelpPanelOpen()) return;
+        if (this.isMobileHelpBtnTarget(e.target)) return;
         this.closeHelpPanel();
     }
 
@@ -373,10 +377,32 @@ export default class ImageController {
             (this.toolbar.contains(target) || this.toastContainer.contains(target));
     }
 
+    // The mobile help modal is a fullscreen backdrop, so every tap should land on
+    // it (and its DOM containment under #toolbar already satisfies isChromeTarget).
+    // But mobile browsers can shift the visual viewport out from under a `position:
+    // fixed` element (e.g. Safari's collapsing address bar), leaving a sliver of
+    // real canvas reachable underneath. A touch landing there would preventDefault
+    // and swallow the synthesized click that was supposed to close the modal via
+    // handleOutsideHelpClickMobile, leaving it stuck open. So while it's open,
+    // bail out of gesture handling entirely regardless of target.
+    isMobileHelpPanelOpen() {
+        const panel = document.getElementById('help-panel-mobile');
+        return !panel.classList.contains('hidden');
+    }
+
+    // True when a tap/click landed on the mobile help button itself. The button owns
+    // its own toggle-click, so every handler that dismisses the open help modal exempts
+    // it - otherwise they'd double-toggle it back open (or swallow its click).
+    isMobileHelpBtnTarget(target) {
+        const helpBtn = document.getElementById('help-btn-mobile');
+        return target instanceof Node && helpBtn.contains(target);
+    }
+
     async handleMouseDown(e) {
         // mousedown/mouseup are bound on window (not scoped to the canvas), so toolbar
         // clicks bubble through here too. Bail out before touching any selection/floating
         // state so a toolbar click's own click handler still runs normally afterward.
+        if (this.isMobileHelpPanelOpen()) return;
         if (this.isChromeTarget(e.target)) return;
 
         if (this.model.isEmpty()) return;
@@ -402,13 +428,27 @@ export default class ImageController {
         // Mirrors handleMouseDown's chrome bail-out. Critical for touch: the
         // preventDefault() below suppresses the synthesized click on chrome buttons
         // (e.g. a toast's close button) if we don't bail out before reaching it.
+        if (this.isMobileHelpPanelOpen()) {
+            // iOS ignores maximum-scale/user-scalable and honors touch-action only
+            // flakily, so a double-tap on the open help modal zooms the page. Kill
+            // the first tap's default here (the second tap lands after the modal has
+            // closed and is caught by the empty/selection paths' own preventDefault).
+            // Exempt the help button so its own toggle-click still fires.
+            if (!this.isMobileHelpBtnTarget(e.target)) e.preventDefault();
+            return;
+        }
         if (this.isChromeTarget(e.target)) return;
 
         // Ignore multi-touch entirely (no preventDefault), leaving room for a future
         // pinch-zoom feature to claim the second finger.
         if (e.touches.length !== 1) return;
 
-        if (this.model.isEmpty()) return;
+        // Same double-tap-zoom guard for taps on the empty canvas: bail out of gesture
+        // handling but still preventDefault so iOS can't zoom the two taps.
+        if (this.model.isEmpty()) {
+            e.preventDefault();
+            return;
+        }
 
         e.preventDefault(); // block scroll/pull-to-refresh mid-drag
         const coords = this.getCanvasCoords(e.touches[0]);
@@ -518,6 +558,16 @@ export default class ImageController {
     }
 
     async handleTouchEnd(e) {
+        // Dismiss the mobile help modal on tap-release. We can't lean on the
+        // window-delegated click handler (handleOutsideHelpClickMobile) here:
+        // iOS/WebKit browsers (Safari, DuckDuckGo) don't synthesize a bubbling
+        // click for taps on non-interactive elements, so the modal would stay
+        // stuck open. touchend fires reliably on every engine. The help button
+        // is excluded - its own click toggles the panel closed.
+        if (this.isMobileHelpPanelOpen()) {
+            if (!this.isMobileHelpBtnTarget(e.target)) this.closeHelpPanel();
+            return;
+        }
         const wasGesture = this.selectionDrag || this.isSelecting;
         if (wasGesture) e.preventDefault();
         await this.handlePointerUp();
