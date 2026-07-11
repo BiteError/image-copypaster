@@ -100,6 +100,21 @@ test('Crop extracts a sub-region and resizes the bitmap to it', async () => {
   expect(bitmap.pixel_color(1, 0)).toStrictEqual({ r: 255, g: 255, b: 255 });
 });
 
+test('Crop clamps a region running past the edge instead of throwing', async () => {
+  const bitmap = await create_test_bitmap();
+  // Right/bottom overrun: Jimp would otherwise read past its pixel Buffer and throw.
+  expect(() => bitmap.crop(250, 150, 100, 100)).not.toThrow();
+  expect(bitmap.width).toBe(50);
+  expect(bitmap.height).toBe(50);
+});
+
+test('Crop clamps a negative origin to zero', async () => {
+  const bitmap = await create_test_bitmap();
+  expect(() => bitmap.crop(-20, -10, 100, 60)).not.toThrow();
+  expect(bitmap.width).toBe(80);
+  expect(bitmap.height).toBe(50);
+});
+
 test('Composite pastes a bitmap onto another at an offset', async () => {
   const base = await create_solid_bitmap(300, 200, { r: 255, g: 255, b: 255 });
   const patch = await create_solid_bitmap(300, 200, { r: 0, g: 0, b: 0 });

@@ -129,7 +129,15 @@ export class JimpBitmap {
     }
 
     crop(x, y, w, h){
-        this.jimp_container.crop({x : x, y: y, w: w, h: h});
+        // A Selection can be moved/resized past the Canvas edge, so clamp the
+        // region to the image before cropping. Jimp reads straight from the pixel
+        // Buffer, so an off-canvas x/y (or a rect running past the right/bottom
+        // edge) makes it read past the Buffer's end and throw a RangeError.
+        const cx = Math.max(0, Math.min(x, this.width));
+        const cy = Math.max(0, Math.min(y, this.height));
+        const cw = Math.max(0, Math.min(x + w, this.width) - cx);
+        const ch = Math.max(0, Math.min(y + h, this.height) - cy);
+        this.jimp_container.crop({x : cx, y: cy, w: cw, h: ch});
         return this.update();
     }
 
